@@ -1,4 +1,4 @@
-# MCP Server Automation Framework
+# mcp_server_automation_framework
 
 
 
@@ -15,14 +15,14 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-git remote add origin https://gitlab.nexdev.net/subarashi/automation/mcp-server-automation-framework.git
+git remote add origin https://gitlab.nexdev.net/victor.nguyen1/mcp_server_automation_framework.git
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
-- [ ] [Set up project integrations](https://gitlab.nexdev.net/subarashi/automation/mcp-server-automation-framework/-/settings/integrations)
+- [ ] [Set up project integrations](https://gitlab.nexdev.net/victor.nguyen1/mcp_server_automation_framework/-/settings/integrations)
 
 ## Collaborate with your team
 
