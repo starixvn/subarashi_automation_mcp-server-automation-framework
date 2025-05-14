@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM {hub.nexdev.net/hub.lumigame.com}/base/python:3.10-alpine as builder
 
 WORKDIR /app
 
@@ -20,6 +20,11 @@ COPY server.py .
 COPY mcp_tools ./mcp_tools
 
 RUN mkdir -p /app/logs && chmod 777 /app/logs
+
+RUN adduser --disabled-password \
+  --home /app \
+  --gecos '' pythonuser && chown -R pythonuser /app && chown -R pythonuser /app/logs
+USER pythonuser
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
