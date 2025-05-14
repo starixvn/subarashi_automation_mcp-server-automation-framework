@@ -10,7 +10,7 @@ mcp = FastMCP(
 )
 
 pw_manager = PlaywrightManager(
-    browser_type="chromium", headless=False, viewport_port=(1200, 900)
+    browser_type="chromium", headless=True, viewport_port=(1200, 900)
 )
 
 work_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -29,11 +29,6 @@ from mcp_tools.server.browser.data import (
     get_cookies,
     kill_all_chrome_instances,
 )
-from mcp_tools.server.browser.proxy_browser import (
-    browser_navigate,
-    browser_click,
-    browser_fill,
-)
 
 # Export all functions for easy importing
 __all__ = [
@@ -58,8 +53,4 @@ __all__ = [
     "clear_browser_data",
     "get_cookies",
     "kill_all_chrome_instances",
-    # Proxy browser
-    "browser_navigate",
-    "browser_click",
-    "browser_fill",
 ]
