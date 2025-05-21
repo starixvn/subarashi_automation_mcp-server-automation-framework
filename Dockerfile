@@ -5,7 +5,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install playwright==1.52.0 && playwright install --with-deps chromium
+RUN pip install playwright==1.52.0 
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/playwright-browsers
+RUN playwright install --with-deps
 
 FROM python:3.11-slim
 
@@ -21,14 +23,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /app/.cache /app/.cache
+COPY --from=builder /app/playwright-browsers /app/playwright-browsers
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/playwright-browsers
 
 COPY server.py .
 COPY mcp_tools ./mcp_tools
 
 RUN mkdir -p /app/logs && chmod 777 /app/logs
 
-# Don't run as root
 RUN adduser --disabled-password \
   --home /app \
   --gecos '' pythonuser && chown -R pythonuser /app && chown -R pythonuser /app/logs
