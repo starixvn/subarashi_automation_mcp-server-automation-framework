@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: mcp-server
     ports:
-      - "8080:8080"
+      - "5000:5000"
     restart: unless-stopped
     networks:
       - mcp-network
@@ -14,7 +14,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=INFO
-      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      - PLAYWRIGHT_BROWSERS_PATH=/app/playwright-browsers
+      - PORT=5000
     deploy:
       resources:
         limits:

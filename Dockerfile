@@ -27,7 +27,7 @@ COPY --from=builder /app/playwright-browsers /app/playwright-browsers
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/playwright-browsers
 
 COPY server.py .
-COPY mcp_tools ./mcp_tools
+COPY mcp_server ./mcp_server
 
 RUN mkdir -p /app/logs && chmod 777 /app/logs
 
