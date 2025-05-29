@@ -1,4 +1,4 @@
 from mcp_server.core.manager import PlaywrightManager
-from mcp_server.core.mcp_setup import mcp, pw_manager, work_dir
+from mcp_server.core.mcp_setup import mcp, get_service_context
 
-__all__ = ["PlaywrightManager", "mcp", "pw_manager", "work_dir"]
+__all__ = ["PlaywrightManager", "mcp", "get_service_context"]

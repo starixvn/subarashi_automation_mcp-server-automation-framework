@@ -1,4 +1,3 @@
-
 from mcp_server.api.rest_client import (
     api_init,
     api_get,
