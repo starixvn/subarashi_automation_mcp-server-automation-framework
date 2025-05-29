@@ -6,7 +6,6 @@ import os
 import logging
 import json
 from typing import Dict, Any, Optional, Union, List
-from mcp_server.core.mcp_setup import work_dir
 
 GOOGLE_IMPORTS_AVAILABLE = True
 try:
@@ -18,13 +17,10 @@ try:
 except ImportError:
     GOOGLE_IMPORTS_AVAILABLE = False
 
+from mcp_server.config.settings import settings
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
 
 
 class GoogleSheetsClient:
@@ -54,11 +50,12 @@ class GoogleSheetsClient:
             self.token_file = os.path.abspath(token_file)
         else:
             token_dir = os.path.dirname(self.credentials_file)
-            self.token_file = os.path.join(token_dir, "token.json")
+            self.token_file = os.path.join(token_dir, settings.GOOGLE_TOKEN_FILENAME)
 
         self.service = None
         self.drive_service = None
         self.creds = None
+        self.scopes = settings.GOOGLE_SCOPES
 
     def authenticate(self) -> bool:
         """
@@ -70,7 +67,7 @@ class GoogleSheetsClient:
         try:
             if os.path.exists(self.token_file):
                 self.creds = Credentials.from_authorized_user_info(
-                    json.loads(open(self.token_file, "r").read()), SCOPES
+                    json.loads(open(self.token_file, "r").read()), self.scopes
                 )
 
             if not self.creds or not self.creds.valid:
@@ -78,7 +75,7 @@ class GoogleSheetsClient:
                     self.creds.refresh(Request())
                 else:
                     flow = InstalledAppFlow.from_client_secrets_file(
-                        self.credentials_file, SCOPES
+                        self.credentials_file, self.scopes
                     )
                     self.creds = flow.run_local_server(port=0)
 

@@ -1,27 +1,23 @@
-"""
-MCP tools for SQL Server database operations.
-"""
 
 import logging
 import json
-from typing import Dict, Any, Optional, List, Union
-from mcp_server.core.mcp_setup import mcp
+from typing import List, Any, Optional, Union
+from mcp import types
+from mcp_server.core.mcp_setup import mcp, get_service_context
 from mcp_server.database.sql_server_client import SQLServerClient
-
-sql_client = None
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@mcp.tool(name="DB-Connect", description="Connect to a SQL Server database")
-def db_connect(
+@mcp.tool(name="db_connect", description="Connect to a SQL Server database")
+async def db_connect(
     server: str,
     database: str,
     username: Optional[str] = None,
     password: Optional[str] = None,
     trusted_connection: bool = False,
-) -> str:
+) -> List[types.TextContent]:
     """
     Connect to a SQL Server database.
 
@@ -33,11 +29,11 @@ def db_connect(
         trusted_connection: Use Windows authentication instead of username/password
 
     Returns:
-        Connection status message
+        List of TextContent với connection status message
     """
-    global sql_client
-
     try:
+        context = await get_service_context()
+        
         sql_client = SQLServerClient(
             server=server,
             database=database,
@@ -47,19 +43,30 @@ def db_connect(
         )
 
         if sql_client.test_connection():
-            return f"Connected to database '{database}' on server '{server}'"
+            context.sql_client = sql_client
+            return [types.TextContent(
+                type="text",
+                text=f"Successfully connected to database '{database}' on server '{server}'"
+            )]
         else:
-            return f"Failed to connect to database '{database}' on server '{server}'"
+            return [types.TextContent(
+                type="text",
+                text=f"Failed to connect to database '{database}' on server '{server}'"
+            )]
+            
     except Exception as e:
         logger.error(f"Error connecting to database: {str(e)}")
-        return f"Error connecting to database: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error connecting to database: {str(e)}"
+        )]
 
 
 @mcp.tool(
-    name="DB-Connect-With-String",
+    name="db_connect_with_string",
     description="Connect to a SQL Server database using a connection string",
 )
-def db_connect_with_string(connection_string: str) -> str:
+async def db_connect_with_string(connection_string: str) -> List[types.TextContent]:
     """
     Connect to a SQL Server database using a custom connection string.
 
@@ -67,11 +74,11 @@ def db_connect_with_string(connection_string: str) -> str:
         connection_string: Full ODBC connection string
 
     Returns:
-        Connection status message
+        List of TextContent với connection status message
     """
-    global sql_client
-
     try:
+        context = await get_service_context()
+        
         sql_client = SQLServerClient(
             server="placeholder",
             database="placeholder",
@@ -79,16 +86,27 @@ def db_connect_with_string(connection_string: str) -> str:
         )
 
         if sql_client.test_connection():
-            return "Connected to database using custom connection string"
+            context.sql_client = sql_client
+            return [types.TextContent(
+                type="text",
+                text="Successfully connected to database using custom connection string"
+            )]
         else:
-            return "Failed to connect using custom connection string"
+            return [types.TextContent(
+                type="text",
+                text="Failed to connect using custom connection string"
+            )]
+            
     except Exception as e:
         logger.error(f"Error connecting to database: {str(e)}")
-        return f"Error connecting to database: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error connecting to database: {str(e)}"
+        )]
 
 
-@mcp.tool(name="DB-Query", description="Execute a SELECT query and return results")
-def db_query(query: str, params: Optional[List[Any]] = None) -> str:
+@mcp.tool(name="db_query", description="Execute a SELECT query and return results")
+async def db_query(query: str, params: Optional[List[Any]] = None) -> List[types.TextContent]:
     """
     Execute a SELECT query on the connected database.
 
@@ -97,26 +115,36 @@ def db_query(query: str, params: Optional[List[Any]] = None) -> str:
         params: Optional parameters for the query
 
     Returns:
-        JSON string with query results
+        List of TextContent với query results as JSON
     """
-    global sql_client
-
-    if sql_client is None:
-        return "Error: Not connected to a database. Use db_connect first."
-
     try:
-        results = sql_client.execute_query(query, params)
-        return json.dumps(results, default=str)
+        context = await get_service_context()
+        
+        if context.sql_client is None:
+            return [types.TextContent(
+                type="text",
+                text="Error: Not connected to a database. Use db_connect first."
+            )]
+
+        results = context.sql_client.execute_query(query, params)
+        return [types.TextContent(
+            type="text",
+            text=json.dumps(results, default=str, indent=2)
+        )]
+        
     except Exception as e:
         logger.error(f"Error executing query: {str(e)}")
-        return f"Error executing query: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error executing query: {str(e)}"
+        )]
 
 
 @mcp.tool(
-    name="DB-Execute",
+    name="db_execute",
     description="Execute a non-query SQL statement (INSERT, UPDATE, DELETE)",
 )
-def db_execute(query: str, params: Optional[List[Any]] = None) -> str:
+async def db_execute(query: str, params: Optional[List[Any]] = None) -> List[types.TextContent]:
     """
     Execute a non-query SQL statement on the connected database.
 
@@ -125,29 +153,42 @@ def db_execute(query: str, params: Optional[List[Any]] = None) -> str:
         params: Optional parameters for the statement
 
     Returns:
-        Message with rows affected
+        List of TextContent với rows affected message
     """
-    global sql_client
-
-    if sql_client is None:
-        return "Error: Not connected to a database. Use db_connect first."
-
     try:
-        affected = sql_client.execute_non_query(query, params)
+        context = await get_service_context()
+        
+        if context.sql_client is None:
+            return [types.TextContent(
+                type="text",
+                text="Error: Not connected to a database. Use db_connect first."
+            )]
+
+        affected = context.sql_client.execute_non_query(query, params)
         if affected >= 0:
-            return f"Statement executed successfully. Rows affected: {affected}"
+            return [types.TextContent(
+                type="text",
+                text=f"Statement executed successfully. Rows affected: {affected}"
+            )]
         else:
-            return "Error executing statement. See logs for details."
+            return [types.TextContent(
+                type="text",
+                text="Error executing statement. See logs for details."
+            )]
+            
     except Exception as e:
         logger.error(f"Error executing statement: {str(e)}")
-        return f"Error executing statement: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error executing statement: {str(e)}"
+        )]
 
 
 @mcp.tool(
-    name="DB-Execute-Many",
+    name="db_execute_many",
     description="Execute a SQL statement with multiple parameter sets",
 )
-def db_execute_many(query: str, params_list: List[List[Any]]) -> str:
+async def db_execute_many(query: str, params_list: List[List[Any]]) -> List[types.TextContent]:
     """
     Execute the same SQL statement with multiple parameter sets.
 
@@ -156,26 +197,39 @@ def db_execute_many(query: str, params_list: List[List[Any]]) -> str:
         params_list: List of parameter sets
 
     Returns:
-        Message with total rows affected
+        List of TextContent với total rows affected message
     """
-    global sql_client
-
-    if sql_client is None:
-        return "Error: Not connected to a database. Use db_connect first."
-
     try:
-        affected = sql_client.execute_many(query, params_list)
+        context = await get_service_context()
+        
+        if context.sql_client is None:
+            return [types.TextContent(
+                type="text",
+                text="Error: Not connected to a database. Use db_connect first."
+            )]
+
+        affected = context.sql_client.execute_many(query, params_list)
         if affected >= 0:
-            return f"Batch executed successfully. Total rows affected: {affected}"
+            return [types.TextContent(
+                type="text",
+                text=f"Batch executed successfully. Total rows affected: {affected}"
+            )]
         else:
-            return "Error executing batch. See logs for details."
+            return [types.TextContent(
+                type="text",
+                text="Error executing batch. See logs for details."
+            )]
+            
     except Exception as e:
         logger.error(f"Error executing batch: {str(e)}")
-        return f"Error executing batch: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error executing batch: {str(e)}"
+        )]
 
 
-@mcp.tool(name="DB-Execute-Script", description="Execute a multi-statement SQL script")
-def db_execute_script(script: str) -> str:
+@mcp.tool(name="db_execute_script", description="Execute a multi-statement SQL script")
+async def db_execute_script(script: str) -> List[types.TextContent]:
     """
     Execute a multi-statement SQL script.
 
@@ -183,49 +237,73 @@ def db_execute_script(script: str) -> str:
         script: SQL script to execute
 
     Returns:
-        Success or error message
+        List of TextContent với success or error message
     """
-    global sql_client
-
-    if sql_client is None:
-        return "Error: Not connected to a database. Use db_connect first."
-
     try:
-        success = sql_client.execute_script(script)
+        context = await get_service_context()
+        
+        if context.sql_client is None:
+            return [types.TextContent(
+                type="text",
+                text="Error: Not connected to a database. Use db_connect first."
+            )]
+
+        success = context.sql_client.execute_script(script)
         if success:
-            return "Script executed successfully"
+            return [types.TextContent(
+                type="text",
+                text="Script executed successfully"
+            )]
         else:
-            return "Error executing script. See logs for details."
+            return [types.TextContent(
+                type="text",
+                text="Error executing script. See logs for details."
+            )]
+            
     except Exception as e:
         logger.error(f"Error executing script: {str(e)}")
-        return f"Error executing script: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error executing script: {str(e)}"
+        )]
 
 
 @mcp.tool(
-    name="DB-Get-Tables", description="Get a list of tables in the connected database"
+    name="db_get_tables", 
+    description="Get a list of tables in the connected database"
 )
-def db_get_tables() -> str:
+async def db_get_tables() -> List[types.TextContent]:
     """
     Get a list of tables in the connected database.
 
     Returns:
-        JSON string with table names
+        List of TextContent với table names as JSON
     """
-    global sql_client
-
-    if sql_client is None:
-        return "Error: Not connected to a database. Use db_connect first."
-
     try:
-        tables = sql_client.get_tables()
-        return json.dumps(tables)
+        context = await get_service_context()
+        
+        if context.sql_client is None:
+            return [types.TextContent(
+                type="text",
+                text="Error: Not connected to a database. Use db_connect first."
+            )]
+
+        tables = context.sql_client.get_tables()
+        return [types.TextContent(
+            type="text",
+            text=json.dumps(tables, indent=2)
+        )]
+        
     except Exception as e:
         logger.error(f"Error getting tables: {str(e)}")
-        return f"Error getting tables: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error getting tables: {str(e)}"
+        )]
 
 
-@mcp.tool(name="DB-Get-Columns", description="Get column information for a table")
-def db_get_columns(table_name: str) -> str:
+@mcp.tool(name="db_get_columns", description="Get column information for a table")
+async def db_get_columns(table_name: str) -> List[types.TextContent]:
     """
     Get column information for a table.
 
@@ -233,38 +311,59 @@ def db_get_columns(table_name: str) -> str:
         table_name: Name of the table
 
     Returns:
-        JSON string with column information
+        List of TextContent với column information as JSON
     """
-    global sql_client
-
-    if sql_client is None:
-        return "Error: Not connected to a database. Use db_connect first."
-
     try:
-        columns = sql_client.get_columns(table_name)
-        return json.dumps(columns, default=str)
+        context = await get_service_context()
+        
+        if context.sql_client is None:
+            return [types.TextContent(
+                type="text",
+                text="Error: Not connected to a database. Use db_connect first."
+            )]
+
+        columns = context.sql_client.get_columns(table_name)
+        return [types.TextContent(
+            type="text",
+            text=json.dumps(columns, default=str, indent=2)
+        )]
+        
     except Exception as e:
         logger.error(f"Error getting columns: {str(e)}")
-        return f"Error getting columns: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error getting columns: {str(e)}"
+        )]
 
 
-@mcp.tool(name="DB-Close", description="Close the database connection")
-def db_close() -> str:
+@mcp.tool(name="db_close", description="Close the database connection")
+async def db_close() -> List[types.TextContent]:
     """
     Close the database connection.
 
     Returns:
-        Confirmation message
+        List of TextContent với confirmation message
     """
-    global sql_client
-
-    if sql_client is None:
-        return "No active database connection to close"
-
     try:
-        sql_client.close()
-        sql_client = None
-        return "Database connection closed"
+        context = await get_service_context()
+        
+        if context.sql_client is None:
+            return [types.TextContent(
+                type="text",
+                text="No active database connection to close"
+            )]
+
+        context.sql_client.close()
+        context.sql_client = None
+        
+        return [types.TextContent(
+            type="text",
+            text="Database connection closed successfully"
+        )]
+        
     except Exception as e:
         logger.error(f"Error closing connection: {str(e)}")
-        return f"Error closing connection: {str(e)}"
+        return [types.TextContent(
+            type="text",
+            text=f"Error closing connection: {str(e)}"
+        )]

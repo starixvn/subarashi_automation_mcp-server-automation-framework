@@ -1,7 +1,3 @@
-"""
-Utility functions for Google Sheets integration.
-"""
-
 import json
 import logging
 from typing import List, Any, Dict, Optional, Union

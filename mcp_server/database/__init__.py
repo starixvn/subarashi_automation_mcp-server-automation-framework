@@ -1,8 +1,8 @@
 """
-MCP Database module for SQL Server database operations.
+Database functionality for MCP Server.
+Includes SQL Server database operations and tools.
 """
 
-from mcp_server.database.sql_server_client import SQLServerClient
 from mcp_server.database.sql_server_tools import (
     db_connect,
     db_connect_with_string,
@@ -16,10 +16,9 @@ from mcp_server.database.sql_server_tools import (
 )
 
 __all__ = [
-    "SQLServerClient",
     "db_connect",
     "db_connect_with_string",
-    "db_query",
+    "db_query", 
     "db_execute",
     "db_execute_many",
     "db_execute_script",

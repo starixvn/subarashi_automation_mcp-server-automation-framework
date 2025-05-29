@@ -5,6 +5,7 @@ SQL Server client for database operations.
 import logging
 import pyodbc
 from typing import List, Dict, Any, Optional, Union
+from mcp_server.config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,10 +58,13 @@ class SQLServerClient:
         if self.custom_connection_string:
             return self.custom_connection_string
 
-        if self.trusted_connection:
-            return f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={self.server};DATABASE={self.database};Trusted_Connection=yes;"
-        else:
-            return f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={self.server};DATABASE={self.database};UID={self.username};PWD={self.password};"
+        return settings.get_database_connection_string(
+            server=self.server,
+            database=self.database,
+            username=self.username,
+            password=self.password,
+            trusted_connection=self.trusted_connection
+        )
 
     def _ensure_connection(self) -> bool:
         """
@@ -72,7 +76,10 @@ class SQLServerClient:
         try:
             if self.connection is None:
                 connection_string = self._get_connection_string()
-                self.connection = pyodbc.connect(connection_string)
+                self.connection = pyodbc.connect(
+                    connection_string,
+                    timeout=settings.DATABASE_CONNECTION_TIMEOUT
+                )
                 logger.info(
                     f"Connected to database '{self.database}' on server '{self.server}'"
                 )
@@ -118,6 +125,7 @@ class SQLServerClient:
 
         try:
             cursor = self.connection.cursor()
+            cursor.timeout = settings.DATABASE_QUERY_TIMEOUT
 
             if params:
                 cursor.execute(query, params)
@@ -156,6 +164,7 @@ class SQLServerClient:
 
         try:
             cursor = self.connection.cursor()
+            cursor.timeout = settings.DATABASE_QUERY_TIMEOUT
 
             if params:
                 cursor.execute(query, params)
@@ -200,6 +209,7 @@ class SQLServerClient:
 
         try:
             cursor = self.connection.cursor()
+            cursor.timeout = settings.DATABASE_QUERY_TIMEOUT
 
             cursor.executemany(query, params_list)
             affected = cursor.rowcount
@@ -234,6 +244,7 @@ class SQLServerClient:
 
         try:
             cursor = self.connection.cursor()
+            cursor.timeout = settings.DATABASE_QUERY_TIMEOUT
 
             batches = script.split("GO")
 
