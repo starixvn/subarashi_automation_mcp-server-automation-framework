@@ -1,7 +1,3 @@
-"""
-Google Sheets API client for MCP tools.
-"""
-
 import os
 import logging
 import json

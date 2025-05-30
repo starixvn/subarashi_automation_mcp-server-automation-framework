@@ -1,8 +1,3 @@
-"""
-MCP Server Framework Settings
-Centralized configuration for all components
-"""
-
 import os
 import tempfile
 from typing import Dict, Any, Tuple
@@ -22,7 +17,7 @@ class Settings:
     # BROWSER CONFIGURATION
     # =====================================================
     BROWSER_TYPE: str = "chromium"  # chromium, firefox, webkit
-    BROWSER_HEADLESS: bool = True
+    BROWSER_HEADLESS: bool = False
     BROWSER_VIEWPORT_WIDTH: int = 1200
     BROWSER_VIEWPORT_HEIGHT: int = 900
     

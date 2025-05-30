@@ -1,7 +1,3 @@
-"""
-SQL Server client for database operations.
-"""
-
 import logging
 import pyodbc
 from typing import List, Dict, Any, Optional, Union

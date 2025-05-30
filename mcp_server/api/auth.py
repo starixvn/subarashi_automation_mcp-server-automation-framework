@@ -1,7 +1,3 @@
-"""
-API authentication functionality for MCP Tools.
-"""
-
 import logging
 import json
 import base64

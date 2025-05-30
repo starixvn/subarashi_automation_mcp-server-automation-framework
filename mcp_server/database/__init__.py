@@ -1,8 +1,3 @@
-"""
-Database functionality for MCP Server.
-Includes SQL Server database operations and tools.
-"""
-
 from mcp_server.database.sql_server_tools import (
     db_connect,
     db_connect_with_string,
