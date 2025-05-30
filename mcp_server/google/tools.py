@@ -1,30 +1,33 @@
 import logging
 import json
 import os
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, List
 
 from mcp import types
 from mcp_server.core.mcp_setup import mcp, get_service_context
 from mcp_server.google.client import GoogleSheetsClient, GOOGLE_IMPORTS_AVAILABLE
-from mcp_server.google.utils import format_data_as_table, parse_json_data
+from mcp_server.google.utils import (
+    format_data_as_table, 
+    parse_json_data,
+    validate_service_account_file,
+    generate_sharing_instructions,
+    get_service_account_email
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@mcp.tool(name="google_sheets_init", description="Initialize Google Sheets API client.")
-async def google_sheets_init(
-    credentials_file: str, token_file: Optional[str] = None
-) -> List[types.TextContent]:
+@mcp.tool(name="google_sheets_init", description="Initialize Google Sheets API client with service account.")
+async def google_sheets_init(credentials_file: str) -> List[types.TextContent]:
     """
-    Initialize Google Sheets API client.
+    Initialize Google Sheets API client with service account credentials.
 
     Args:
-        credentials_file: Path to the credentials.json file
-        token_file: Optional path to the token.json file (if not provided, will be created in the same directory as credentials)
+        credentials_file: Path to the service account credentials JSON file
 
     Returns:
-        List of TextContent với success status and message
+        List of TextContent with success status and message
     """
     try:
         if not GOOGLE_IMPORTS_AVAILABLE:
@@ -32,7 +35,7 @@ async def google_sheets_init(
                 type="text",
                 text=(
                     "Google API libraries not available. Install with: "
-                    "pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client"
+                    "pip install google-auth google-api-python-client"
                 )
             )]
 
@@ -41,32 +44,124 @@ async def google_sheets_init(
         if not os.path.isabs(credentials_file):
             credentials_file = os.path.join(context.work_directory, credentials_file)
 
-        if token_file and not os.path.isabs(token_file):
-            token_file = os.path.join(context.work_directory, token_file)
+        validation_result = validate_service_account_file(credentials_file)
+        if not validation_result["valid"]:
+            return [types.TextContent(
+                type="text",
+                text=f"Invalid service account credentials: {validation_result['error']}"
+            )]
 
-        sheets_client = GoogleSheetsClient(
-            credentials_file=credentials_file, token_file=token_file
-        )
+        sheets_client = GoogleSheetsClient(credentials_file=credentials_file)
 
         if sheets_client.authenticate():
             context.sheets_client = sheets_client
-            return [types.TextContent(
-                type="text",
-                text="Google Sheets client initialized successfully"
-            )]
+            service_email = sheets_client.get_service_account_email()
+            
+            message = f"Google Sheets client initialized successfully with service account: {service_email}"
+            if service_email:
+                message += f"\n\nTo access spreadsheets, share them with: {service_email}"
+            
+            return [types.TextContent(type="text", text=message)]
         else:
             return [types.TextContent(
                 type="text",
-                text="Failed to authenticate with Google Sheets API"
+                text="Failed to authenticate with Google Sheets API using service account"
             )]
             
     except Exception as e:
         error_msg = f"Error initializing Google Sheets client: {str(e)}"
         logger.error(error_msg)
+        return [types.TextContent(type="text", text=error_msg)]
+
+
+@mcp.tool(name="google_service_account_info", description="Get service account information and sharing instructions.")
+async def google_service_account_info() -> List[types.TextContent]:
+    """
+    Get information about the current service account and sharing instructions.
+
+    Returns:
+        List of TextContent with service account details and sharing instructions
+    """
+    try:
+        context = await get_service_context()
+
+        if not context.sheets_client:
+            return [types.TextContent(
+                type="text",
+                text="Error: Google Sheets client not initialized. Use google_sheets_init first."
+            )]
+
+        service_email = context.sheets_client.get_service_account_email()
+        
+        if not service_email:
+            return [types.TextContent(
+                type="text",
+                text="Error: Could not retrieve service account email"
+            )]
+
+        sharing_instructions = generate_sharing_instructions(service_email)
+        
+        result = {
+            "service_account_email": service_email,
+            "authentication_type": "Service Account",
+            "sharing_instructions": sharing_instructions
+        }
+
         return [types.TextContent(
             type="text",
-            text=error_msg
+            text=json.dumps(result, indent=2)
         )]
+        
+    except Exception as e:
+        error_msg = f"Error getting service account info: {str(e)}"
+        logger.error(error_msg)
+        return [types.TextContent(type="text", text=error_msg)]
+
+
+@mcp.tool(name="google_validate_credentials", description="Validate service account credentials file.")
+async def google_validate_credentials(credentials_file: str) -> List[types.TextContent]:
+    """
+    Validate service account credentials file structure and content.
+
+    Args:
+        credentials_file: Path to the service account credentials JSON file
+
+    Returns:
+        List of TextContent with validation results
+    """
+    try:
+        context = await get_service_context()
+
+        if not os.path.isabs(credentials_file):
+            credentials_file = os.path.join(context.work_directory, credentials_file)
+
+        validation_result = validate_service_account_file(credentials_file)
+        
+        if validation_result["valid"]:
+            service_email = validation_result["email"]
+            sharing_instructions = generate_sharing_instructions(service_email)
+            
+            result = {
+                "valid": True,
+                "service_account_email": service_email,
+                "project_id": validation_result["project_id"],
+                "sharing_instructions": sharing_instructions
+            }
+        else:
+            result = {
+                "valid": False,
+                "error": validation_result["error"]
+            }
+
+        return [types.TextContent(
+            type="text",
+            text=json.dumps(result, indent=2)
+        )]
+        
+    except Exception as e:
+        error_msg = f"Error validating credentials: {str(e)}"
+        logger.error(error_msg)
+        return [types.TextContent(type="text", text=error_msg)]
 
 
 @mcp.tool(name="google_sheets_read", description="Read data from a Google Sheet.")
@@ -86,7 +181,7 @@ async def google_sheets_read(
         as_json: Whether to return the data as JSON (if False, returns a formatted table)
 
     Returns:
-        List of TextContent với the data from the sheet and metadata
+        List of TextContent with the data from the sheet and metadata
     """
     try:
         context = await get_service_context()
@@ -147,7 +242,7 @@ async def google_sheets_read(
     description="Write data to a Google Sheet, replacing existing data.",
 )
 async def google_sheets_write(
-    spreadsheet_id: str, range_name: str, data: Union[List[List[Any]], str]
+    spreadsheet_id: str, range_name: str, data: List[List[Any]]
 ) -> List[types.TextContent]:
     """
     Write data to a Google Sheet, replacing existing data in the range.
@@ -155,10 +250,10 @@ async def google_sheets_write(
     Args:
         spreadsheet_id: ID of the Google Sheet (from the URL)
         range_name: Range to write to (e.g., 'Sheet1!A1')
-        data: Data to write, either as a 2D list or a JSON string representing a 2D list
+        data: Data to write as a 2D list
 
     Returns:
-        List of TextContent với the response from the API
+        List of TextContent with the response from the API
     """
     try:
         context = await get_service_context()
@@ -208,7 +303,7 @@ async def google_sheets_write(
 
 @mcp.tool(name="google_sheets_append", description="Append data to a Google Sheet.")
 async def google_sheets_append(
-    spreadsheet_id: str, range_name: str, data: Union[List[List[Any]], str]
+    spreadsheet_id: str, range_name: str, data: List[List[Any]]
 ) -> List[types.TextContent]:
     """
     Append data to a Google Sheet.
@@ -216,10 +311,10 @@ async def google_sheets_append(
     Args:
         spreadsheet_id: ID of the Google Sheet (from the URL)
         range_name: Range to append to (e.g., 'Sheet1!A1')
-        data: Data to append, either as a 2D list or a JSON string representing a 2D list
+        data: Data to append as a 2D list
 
     Returns:
-        List of TextContent với the response from the API
+        List of TextContent with the response from the API
     """
     try:
         context = await get_service_context()
@@ -280,7 +375,7 @@ async def google_sheets_clear(spreadsheet_id: str, range_name: str) -> List[type
         range_name: Range to clear (e.g., 'Sheet1!A1:D10')
 
     Returns:
-        List of TextContent với the response from the API
+        List of TextContent with the response from the API
     """
     try:
         context = await get_service_context()
@@ -331,7 +426,7 @@ async def google_sheets_create_sheet(spreadsheet_id: str, title: str) -> List[ty
         title: Title for the new sheet
 
     Returns:
-        List of TextContent với the response from the API
+        List of TextContent with the response from the API
     """
     try:
         context = await get_service_context()
@@ -388,7 +483,7 @@ async def google_sheets_get_sheets(spreadsheet_id: str) -> List[types.TextConten
         spreadsheet_id: ID of the Google Sheet (from the URL)
 
     Returns:
-        List of TextContent với the response from the API
+        List of TextContent with the response from the API
     """
     try:
         context = await get_service_context()

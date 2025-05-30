@@ -1,6 +1,7 @@
-
 from mcp_server.google.tools import (
     google_sheets_init,
+    google_service_account_info,
+    google_validate_credentials,
     google_sheets_read,
     google_sheets_write,
     google_sheets_append,
@@ -11,6 +12,8 @@ from mcp_server.google.tools import (
 
 __all__ = [
     "google_sheets_init",
+    "google_service_account_info",
+    "google_validate_credentials",
     "google_sheets_read",
     "google_sheets_write",
     "google_sheets_append",

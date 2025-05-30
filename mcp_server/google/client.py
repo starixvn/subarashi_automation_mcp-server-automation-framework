@@ -1,13 +1,11 @@
 import os
 import logging
 import json
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, List
 
 GOOGLE_IMPORTS_AVAILABLE = True
 try:
     from google.oauth2.service_account import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
 except ImportError:
@@ -20,33 +18,26 @@ logger = logging.getLogger(__name__)
 
 
 class GoogleSheetsClient:
-    """Client for Google Sheets API."""
+    """Client for Google Sheets API using Service Account Authentication."""
 
-    def __init__(self, credentials_file: str, token_file: Optional[str] = None):
+    def __init__(self, credentials_file: str):
         """
-        Initialize the Google Sheets client.
+        Initialize the Google Sheets client with service account credentials.
 
         Args:
-            credentials_file: Path to the credentials.json file
-            token_file: Path to the token.json file (if not provided, will be created in same directory as credentials)
+            credentials_file: Path to the service account credentials JSON file
         """
         if not GOOGLE_IMPORTS_AVAILABLE:
             raise ImportError(
                 "Google API libraries not available. Please install required packages: "
-                "pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib"
+                "pip install google-api-python-client google-auth"
             )
 
         self.credentials_file = os.path.abspath(credentials_file)
         if not os.path.exists(self.credentials_file):
             raise FileNotFoundError(
-                f"Credentials file not found at {self.credentials_file}"
+                f"Service account credentials file not found at {self.credentials_file}"
             )
-
-        if token_file:
-            self.token_file = os.path.abspath(token_file)
-        else:
-            token_dir = os.path.dirname(self.credentials_file)
-            self.token_file = os.path.join(token_dir, settings.GOOGLE_TOKEN_FILENAME)
 
         self.service = None
         self.drive_service = None
@@ -55,38 +46,40 @@ class GoogleSheetsClient:
 
     def authenticate(self) -> bool:
         """
-        Authenticate with Google Sheets API.
+        Authenticate with Google Sheets API using service account credentials.
 
         Returns:
             True if authentication was successful, False otherwise
         """
         try:
-            if os.path.exists(self.token_file):
-                self.creds = Credentials.from_authorized_user_info(
-                    json.loads(open(self.token_file, "r").read()), self.scopes
-                )
-
-            if not self.creds or not self.creds.valid:
-                if self.creds and self.creds.expired and self.creds.refresh_token:
-                    self.creds.refresh(Request())
-                else:
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        self.credentials_file, self.scopes
-                    )
-                    self.creds = flow.run_local_server(port=0)
-
-                with open(self.token_file, "w") as token:
-                    token.write(self.creds.to_json())
+            self.creds = Credentials.from_service_account_file(
+                self.credentials_file, scopes=self.scopes
+            )
 
             self.service = build("sheets", "v4", credentials=self.creds)
             self.drive_service = build("drive", "v3", credentials=self.creds)
 
-            logger.info("Successfully authenticated with Google Sheets API")
+            logger.info("Successfully authenticated with Google Sheets API using service account")
             return True
 
         except Exception as e:
-            logger.error(f"Authentication error: {str(e)}")
+            logger.error(f"Service account authentication error: {str(e)}")
             return False
+
+    def get_service_account_email(self) -> Optional[str]:
+        """
+        Get the email address of the service account.
+
+        Returns:
+            Service account email if available, None otherwise
+        """
+        try:
+            with open(self.credentials_file, 'r') as f:
+                creds_data = json.load(f)
+                return creds_data.get('client_email')
+        except Exception as e:
+            logger.error(f"Error reading service account email: {str(e)}")
+            return None
 
     def read_sheet(
         self, spreadsheet_id: str, range_name: str, include_headers: bool = True
