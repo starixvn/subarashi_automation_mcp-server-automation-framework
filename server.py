@@ -24,29 +24,22 @@ logger = logging.getLogger(__name__)
 
 
 def create_starlette_app(*, debug: bool = None) -> Starlette:
-    """Create a Starlette application với SSE transport cho MCP server."""
+    """Create a Starlette application with SSE transport for MCP server."""
     sse = SseServerTransport("/messages/")
     
     debug = debug if debug is not None else settings.SERVER_DEBUG
 
     async def handle_sse(request: Request):
-        """Handle SSE connections."""
-        try:
-            async with sse.connect_sse(
-                request.scope,
-                request.receive,
-                request._send,
-            ) as (read_stream, write_stream):
-                await mcp._mcp_server.run(
-                    read_stream,
-                    write_stream,
-                    mcp._mcp_server.create_initialization_options(),
-                )
-        except Exception as e:
-            logger.error(f"Error in SSE connection: {e}")
-            return JSONResponse(
-                {"error": "Internal server error"}, 
-                status_code=500
+        """Handle SSE connections following the exact pattern from mcp library documentation."""
+        async with sse.connect_sse(
+            request.scope,
+            request.receive,
+            request._send,
+        ) as (read_stream, write_stream):
+            await mcp._mcp_server.run(
+                read_stream,
+                write_stream,
+                mcp._mcp_server.create_initialization_options(),
             )
         return Response()
 
@@ -57,6 +50,13 @@ def create_starlette_app(*, debug: bool = None) -> Starlette:
             "service": "Automation Testing Framework",
             "version": "1.0.0",
             "mcp_version": "latest",
+            "transport": "sse",
+            "endpoints": {
+                "sse": "/sse",
+                "messages": "/messages/",
+                "health": "/health",
+                "tools": "/tools"
+            },
             "settings": {
                 "browser_type": settings.BROWSER_TYPE,
                 "browser_headless": settings.BROWSER_HEADLESS,
@@ -66,18 +66,29 @@ def create_starlette_app(*, debug: bool = None) -> Starlette:
         })
 
     async def list_tools(request: Request):
-        """API endpoint để list available tools."""
+        """API endpoint to list available tools."""
         try:
             tools_info = {
-                "browser_tools": [
-                    "browser_navigate", "browser_close", "browser_go_back", "browser_reload", "get_current_url",
-                    "browser_fill", "browser_click", "browser_press_key", "browser_find_by_xpath", "clear_field",
-                    "browser_scroll_to_top", "browser_scroll_to_bottom", "browser_scroll_to_element", "browser_scroll_one_step",
-                    "clear_browser_data", "get_cookies", "kill_all_chrome_instances", "browser_close_all"
+                "browser_core_tools": [
+                    "browser_navigate", "browser_go_back", "browser_reload", "get_current_url",
+                    "browser_click", "browser_fill", "browser_type_advanced", "browser_press_key", 
+                    "browser_hover", "browser_find_by_xpath", "browser_select_option", "clear_field",
+                    "browser_close", "browser_resize", "browser_install"
                 ],
-                "content_tools": [
-                    "browser_save_as_pdf", "browser_screenshot", "get_element_html", "get_element_text",
-                    "get_page_content", "get_page_html", "get_page_title", "save_element_as_html", "save_page_as_html"
+                "browser_advanced_tools": [
+                    "browser_drag", "browser_handle_dialog", "browser_console_messages",
+                    "browser_scroll_to_top", "browser_scroll_to_bottom", "browser_scroll_to_element", "browser_scroll_one_step",
+                    "browser_wait_for"
+                ],
+                "browser_data_tools": [
+                    "get_page_content", "get_page_html", "get_page_title",
+                    "clear_browser_data", "get_cookies",
+                    "browser_file_upload"
+                ],
+                "browser_vision_tools": [
+                    "browser_capture_for_vision", "browser_save_screenshot", "browser_save_as_pdf",
+                    "browser_screen_click", "browser_screen_drag", "browser_screen_move_mouse",
+                    "browser_tab_list", "browser_tab_new", "browser_tab_select", "browser_tab_close"
                 ],
                 "api_tools": [
                     "api_init", "api_get", "api_post", "api_put", "api_delete",
@@ -94,12 +105,14 @@ def create_starlette_app(*, debug: bool = None) -> Starlette:
             }
             
             return JSONResponse({
-                "framework": "Automation Testing Framework",
+                "framework": "MCP Automation Testing Framework",
                 "total_tools": sum(len(tools) for tools in tools_info.values()),
                 "tools_by_category": tools_info,
                 "tool_counts": {
-                    "browser_tools": len(tools_info["browser_tools"]),
-                    "content_tools": len(tools_info["content_tools"]),
+                    "browser_core_tools": len(tools_info["browser_core_tools"]),
+                    "browser_advanced_tools": len(tools_info["browser_advanced_tools"]), 
+                    "browser_data_tools": len(tools_info["browser_data_tools"]),
+                    "browser_vision_tools": len(tools_info["browser_vision_tools"]),
                     "api_tools": len(tools_info["api_tools"]),
                     "database_tools": len(tools_info["database_tools"]),
                     "google_tools": len(tools_info["google_tools"])
@@ -125,16 +138,16 @@ def create_starlette_app(*, debug: bool = None) -> Starlette:
     return Starlette(
         debug=debug,
         routes=[
-            Route("/sse", endpoint=handle_sse),
-            Route("/health", endpoint=health_check),
-            Route("/tools", endpoint=list_tools),
+            Route("/sse", endpoint=handle_sse, methods=["GET"]),
+            Route("/health", endpoint=health_check, methods=["GET"]),
+            Route("/tools", endpoint=list_tools, methods=["GET"]),
             Mount("/messages/", app=sse.handle_post_message),
         ],
     )
 
 
 def main():
-    """Run the MCP server với improved configuration."""
+    """Run the MCP server with improved configuration."""
     parser = argparse.ArgumentParser(
         description="MCP Automation Testing Framework Server"
     )
@@ -162,9 +175,12 @@ def main():
 
     starlette_app = create_starlette_app(debug=args.debug)
 
-    logger.info(
-        f"Starting MCP Automation Testing Framework server on {args.host}:{args.port}"
-    )
+    logger.info(f" Starting MCP Automation Testing Framework server on {args.host}:{args.port}")
+    logger.info(f" Transport: Server-Sent Events (SSE)")
+    logger.info(f" SSE Endpoint: http://{args.host}:{args.port}/sse")
+    logger.info(f" Messages Endpoint: http://{args.host}:{args.port}/messages/")
+    logger.info(f" Health Check: http://{args.host}:{args.port}/health")
+    logger.info(f" Tools List: http://{args.host}:{args.port}/tools")
     logger.info(f"Configuration loaded from settings:")
     logger.info(f"  - Browser: {settings.BROWSER_TYPE} ({'headless' if settings.BROWSER_HEADLESS else 'headed'})")
     logger.info(f"  - Viewport: {settings.BROWSER_VIEWPORT_WIDTH}x{settings.BROWSER_VIEWPORT_HEIGHT}")

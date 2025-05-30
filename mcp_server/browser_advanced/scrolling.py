@@ -1,41 +1,34 @@
 import logging
-import asyncio
+from typing import List
 from mcp import types
 from mcp_server.core.mcp_setup import mcp, get_service_context
 from mcp_server.config.settings import settings
-from typing import List
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@mcp.tool(name="browser_scroll_to_top", description="Scroll the page to the very top.")
+@mcp.tool(
+    name="browser_scroll_to_top",
+    description="Scroll to the top of the page.",
+)
 async def browser_scroll_to_top() -> List[types.TextContent]:
     """
-    Scroll the page to the very top.
+    Scroll to the top of the page.
 
     Returns:
-        List of TextContent với scroll confirmation
+        List of TextContent with scroll confirmation
     """
     try:
         context = await get_service_context()
         page = await context.playwright_manager.ensure_browser()
         logger.info("Scrolling to top of page")
 
-        await page.evaluate(
-            """() => {
-            window.scrollTo({
-                top: 0,
-                left: 0,
-                behavior: 'smooth'
-            });
-        }"""
-        )
-        await asyncio.sleep(settings.BROWSER_SCROLL_DELAY)
+        await page.evaluate("window.scrollTo(0, 0)")
         
         return [types.TextContent(
             type="text",
-            text="Successfully scrolled to top of page"
+            text="Successfully scrolled to the top of the page"
         )]
         
     except Exception as e:
@@ -48,44 +41,26 @@ async def browser_scroll_to_top() -> List[types.TextContent]:
 
 
 @mcp.tool(
-    name="browser_scroll_to_bottom", description="Scroll the page to the very bottom."
+    name="browser_scroll_to_bottom",
+    description="Scroll to the bottom of the page.",
 )
 async def browser_scroll_to_bottom() -> List[types.TextContent]:
     """
-    Scroll the page to the very bottom.
+    Scroll to the bottom of the page.
 
     Returns:
-        List of TextContent với scroll confirmation
+        List of TextContent with scroll confirmation
     """
     try:
         context = await get_service_context()
         page = await context.playwright_manager.ensure_browser()
         logger.info("Scrolling to bottom of page")
 
-        await page.evaluate(
-            """() => {
-            const scrollHeight = Math.max(
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight,
-                document.body.offsetHeight,
-                document.documentElement.offsetHeight,
-                document.body.clientHeight,
-                document.documentElement.clientHeight
-            );
-            
-            window.scrollTo({
-                top: scrollHeight,
-                left: 0,
-                behavior: 'smooth'
-            });
-        }"""
-        )
-
-        await asyncio.sleep(settings.BROWSER_SCROLL_DELAY)
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         
         return [types.TextContent(
             type="text",
-            text="Successfully scrolled to bottom of page"
+            text="Successfully scrolled to the bottom of the page"
         )]
         
     except Exception as e:
@@ -99,17 +74,17 @@ async def browser_scroll_to_bottom() -> List[types.TextContent]:
 
 @mcp.tool(
     name="browser_scroll_to_element",
-    description="Scroll the page until the specified element is in view.",
+    description="Scroll to a specific element on the page.",
 )
 async def browser_scroll_to_element(selector: str) -> List[types.TextContent]:
     """
-    Scroll the page until the specified element is in view.
+    Scroll to a specific element on the page.
 
     Args:
-        selector: CSS or XPath selector for the element to scroll to
+        selector: CSS or XPath selector to find the element
 
     Returns:
-        List of TextContent với scroll confirmation
+        List of TextContent with scroll confirmation
     """
     try:
         if not selector or not isinstance(selector, str):
@@ -126,31 +101,16 @@ async def browser_scroll_to_element(selector: str) -> List[types.TextContent]:
 
         context = await get_service_context()
         page = await context.playwright_manager.ensure_browser()
-        logger.info(f"Scrolling to element with selector: {selector}")
+        logger.info(f"Scrolling to element: {selector}")
 
         element = await page.query_selector(selector)
         if not element:
             return [types.TextContent(
                 type="text",
-                text=f"Error: No element found with selector: {selector}"
+                text=f"Error: Element not found with selector '{selector}'"
             )]
 
-        await page.evaluate(
-            f"""
-            (selector) => {{
-                const element = document.querySelector(selector);
-                if (element) {{
-                    element.scrollIntoView({{
-                        behavior: 'smooth',
-                        block: 'center'
-                    }});
-                }}
-            }}
-        """,
-            selector,
-        )
-
-        await asyncio.sleep(settings.BROWSER_SCROLL_DELAY)
+        await element.scroll_into_view_if_needed()
         
         return [types.TextContent(
             type="text",
@@ -166,39 +126,51 @@ async def browser_scroll_to_element(selector: str) -> List[types.TextContent]:
         )]
 
 
-@mcp.tool(name="browser_scroll_one_step", description="Scroll the page by one step.")
-async def browser_scroll_one_step(step: int = 100) -> List[types.TextContent]:
+@mcp.tool(
+    name="browser_scroll_one_step",
+    description="Scroll the page by one step in the specified direction.",
+)
+async def browser_scroll_one_step(direction: str = "down") -> List[types.TextContent]:
     """
-    Scroll the page by one step.
+    Scroll the page by one step in the specified direction.
 
     Args:
-        step: The number of pixels to scroll. Positive for down, negative for up.
+        direction: Direction to scroll ('up', 'down', 'left', 'right')
 
     Returns:
-        List of TextContent với scroll confirmation message
+        List of TextContent with scroll confirmation
     """
     try:
-        if not isinstance(step, int):
+        if direction not in ["up", "down", "left", "right"]:
             return [types.TextContent(
                 type="text",
-                text="Error: Step must be an integer"
+                text="Error: Direction must be 'up', 'down', 'left', or 'right'"
             )]
 
         context = await get_service_context()
         page = await context.playwright_manager.ensure_browser()
-        logger.info(f"Scrolling the page by {step} pixels")
+        logger.info(f"Scrolling one step {direction}")
 
-        await page.evaluate(f"window.scrollBy(0, {step})")
+        scroll_amount = 200  # pixels
+        
+        if direction == "down":
+            await page.evaluate(f"window.scrollBy(0, {scroll_amount})")
+        elif direction == "up":
+            await page.evaluate(f"window.scrollBy(0, -{scroll_amount})")
+        elif direction == "right":
+            await page.evaluate(f"window.scrollBy({scroll_amount}, 0)")
+        elif direction == "left":
+            await page.evaluate(f"window.scrollBy(-{scroll_amount}, 0)")
         
         return [types.TextContent(
             type="text",
-            text=f"Successfully scrolled the page by {step} pixels"
+            text=f"Successfully scrolled {scroll_amount} pixels {direction}"
         )]
         
     except Exception as e:
-        error_msg = f"Failed to scroll the page: {str(e)}"
+        error_msg = f"Failed to scroll {direction}: {str(e)}"
         logger.error(error_msg)
         return [types.TextContent(
             type="text",
             text=error_msg
-        )]
+        )] 

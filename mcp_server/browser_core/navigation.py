@@ -17,7 +17,7 @@ async def browser_navigate(url: str) -> List[types.TextContent]:
         url: The URL to navigate to
 
     Returns:
-        List of TextContent với navigation result
+        List of TextContent with navigation result
     """
     try:
         if not url or not isinstance(url, str):
@@ -62,30 +62,6 @@ async def browser_navigate(url: str) -> List[types.TextContent]:
         )]
 
 
-@mcp.tool(name="browser_close", description="Close all browser resources explicitly.")
-async def browser_close() -> List[types.TextContent]:
-    """
-    Close all browser resources explicitly.
-
-    Returns:
-        List of TextContent với closure confirmation
-    """
-    try:
-        context = await get_service_context()
-        await context.playwright_manager.close()
-        
-        return [types.TextContent(
-            type="text",
-            text="Browser closed successfully"
-        )]
-    except Exception as e:
-        logger.error(f"Error closing browser: {str(e)}")
-        return [types.TextContent(
-            type="text",
-            text=f"Error closing browser: {str(e)}"
-        )]
-
-
 @mcp.tool(
     name="browser_go_back", 
     description="Go back to the previous page in the browser."
@@ -95,7 +71,7 @@ async def browser_go_back() -> List[types.TextContent]:
     Go back to the previous page in the browser.
 
     Returns:
-        List of TextContent với navigation result
+        List of TextContent with navigation result
     """
     try:
         context = await get_service_context()
@@ -123,7 +99,7 @@ async def browser_reload() -> List[types.TextContent]:
     Reload the current page.
 
     Returns:
-        List of TextContent với reload confirmation
+        List of TextContent with reload confirmation
     """
     try:
         context = await get_service_context()
@@ -151,7 +127,7 @@ async def get_current_url() -> List[types.TextContent]:
     Get the URL of the current page.
 
     Returns:
-        List of TextContent với current URL
+        List of TextContent with current URL
     """
     try:
         context = await get_service_context()
@@ -168,4 +144,4 @@ async def get_current_url() -> List[types.TextContent]:
         return [types.TextContent(
             type="text",
             text=f"Error getting current URL: {str(e)}"
-        )]
+        )] 

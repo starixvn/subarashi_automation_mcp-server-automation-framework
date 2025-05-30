@@ -47,8 +47,10 @@ mcp = FastMCP(
 pw_manager = service_context.playwright_manager
 work_dir = service_context.work_directory
 
-import mcp_server.browser
-import mcp_server.content  
+import mcp_server.browser_core
+import mcp_server.browser_advanced  
+import mcp_server.browser_data
+import mcp_server.browser_vision
 import mcp_server.api
 import mcp_server.database
 import mcp_server.google

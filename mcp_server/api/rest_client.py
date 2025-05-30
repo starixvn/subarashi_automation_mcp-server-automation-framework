@@ -1,7 +1,3 @@
-"""
-REST API client functionality for MCP Tools.
-"""
-
 import logging
 import json
 import requests
