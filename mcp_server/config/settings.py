@@ -17,7 +17,7 @@ class Settings:
     # BROWSER CONFIGURATION
     # =====================================================
     BROWSER_TYPE: str = "chromium"  # chromium, firefox, webkit
-    BROWSER_HEADLESS: bool = False
+    BROWSER_HEADLESS: bool = True
     BROWSER_VIEWPORT_WIDTH: int = 1200
     BROWSER_VIEWPORT_HEIGHT: int = 900
     
