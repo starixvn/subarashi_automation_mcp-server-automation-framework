@@ -1,6 +1,6 @@
 # MCP Server Automation Framework
 
-A powerful **Model Context Protocol (MCP) Server** implementation for browser automation and testing using Python and Playwright. This framework provides full compatibility with the TypeScript playwright-mcp implementation and supports advanced features including vision-based interactions, accessibility snapshots, multi-transport support, and comprehensive browser automation capabilities.
+A powerful **Model Context Protocol (MCP) Server** implementation for browser automation and testing using Python and Playwright. This framework provides full compatibility and supports advanced features including vision-based interactions, accessibility snapshots, multi-transport support, and comprehensive browser automation capabilities.
 
 ## 🏗️ Architecture Overview
 
