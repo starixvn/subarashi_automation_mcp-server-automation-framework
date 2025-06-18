@@ -1,0 +1,57 @@
+{
+  "browser": {
+    "browser_name": "chromium",
+    "browser_agent": null,
+    "isolated": true,
+    "user_data_dir": null,
+    "cdp_endpoint": null,
+    "remote_endpoint": null,
+    "launch_options": {
+      "channel": "chrome",
+      "executable_path": null,
+      "headless": true,
+      "chromium_sandbox": true,
+      "proxy": null,
+      "traces_dir": null,
+      "assistant_mode": true
+    },
+    "context_options": {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "storage_state": null,
+      "user_agent": null,
+      "ignore_https_errors": false,
+      "service_workers": "allow"
+    }
+  },
+  "server": {
+    "port": 5000,
+    "host": "0.0.0.0"
+  },
+  "network": {
+    "allowed_origins": null,
+    "blocked_origins": null
+  },
+  "capabilities": [
+    "core",
+    "vision", 
+    "tabs",
+    "console",
+    "keyboard",
+    "network",
+    "files",
+    "testing",
+    "wait",
+    "pdf",
+    "api",
+    "google_sheets",
+    "database"
+  ],
+  "vision": false,
+  "save_trace": false,
+  "output_dir": "/app/output",
+  "image_responses": "auto",
+  "extension": false
+} 
