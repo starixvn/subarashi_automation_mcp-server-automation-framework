@@ -54,7 +54,6 @@ ENV MCP_HEADLESS=true
 ENV MCP_OUTPUT_DIR=/app/output
 ENV MCP_ISOLATED=true
 
-EXPOSE 5000
-EXPOSE 8080
+EXPOSE 5003
 
-CMD ["python", "main.py", "--config", "config/docker-default.json", "--transport", "sse", "--host", "0.0.0.0", "--port", "5000", "--headless", "--isolated"]
+CMD ["python", "main.py", "--config", "config/docker-default.json", "--transport", "sse", "--host", "0.0.0.0", "--port", "5003", "--headless", "--isolated"]
