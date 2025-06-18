@@ -1,486 +1,940 @@
 # MCP Server Automation Framework
 
-A comprehensive Model Context Protocol (MCP) server providing advanced automation capabilities for browser control, API testing, database operations, and Google Sheets integration using Server-Sent Events (SSE) transport.
+A powerful **Model Context Protocol (MCP) Server** implementation for browser automation and testing using Python and Playwright. This framework provides full compatibility with the TypeScript playwright-mcp implementation and supports advanced features including vision-based interactions, accessibility snapshots, multi-transport support, and comprehensive browser automation capabilities.
 
-## 🚀 Overview
+## 🏗️ Architecture Overview
 
-This MCP server framework delivers a robust automation testing platform with the following core capabilities:
+### Project Structure
 
-- **Browser Automation**: Full-featured web automation using Playwright with support for Chromium, Firefox, and WebKit
-- **API Testing**: Complete REST API client with authentication support (Basic, Bearer Token, OAuth2)
-- **Database Operations**: SQL Server connectivity with comprehensive query and transaction support
-- **Google Sheets Integration**: Service account-based Google Sheets API integration
-- **Vision-Based Automation**: Screenshot capture and coordinate-based interactions
-- **SSE Transport**: Real-time communication using Server-Sent Events
+```
+MCP_Server_Automation_Framework/
+├── config/                 # Configuration management system
+│   ├── __init__.py        # Configuration exports
+│   ├── cli.py             # CLI argument parsing
+│   └── settings.py        # Settings definitions
+├── core/                  # Core browser automation components
+│   ├── __init__.py        # Core exports
+│   ├── browser.py         # Browser management
+│   ├── browser_context_factory.py  # Context factory patterns
+│   ├── download_tracker.py # Download state tracking
+│   ├── modal_state.py     # Modal dialog management
+│   ├── snapshot.py        # Page snapshot capabilities
+│   └── tab.py             # Tab lifecycle management
+├── tools/                 # Tool registry and implementations
+│   ├── __init__.py        # Tool exports
+│   ├── console.py         # Console message tools
+│   ├── core.py            # Core navigation tools
+│   ├── dialogs.py         # Dialog interaction tools
+│   ├── files.py           # File upload/download tools
+│   ├── interaction.py     # Element interaction tools
+│   ├── keyboard.py        # Keyboard input tools
+│   ├── network.py         # Network interception tools
+│   ├── pdf.py             # PDF generation tools
+│   ├── registry.py        # Tool registry system
+│   ├── schemas.py         # Input schema definitions
+│   ├── tabs.py            # Tab management tools
+│   ├── testing.py         # Testing utilities
+│   ├── tool_schema.py     # Tool schema framework
+│   ├── utils.py           # Utility functions
+│   ├── vision.py          # Vision and screenshot tools
+│   └── wait.py            # Wait condition tools
+├── transports/            # Multiple transport protocols
+│   ├── __init__.py        # Transport exports
+│   ├── streamable_http.py # HTTP transport
+│   └── websocket.py       # WebSocket transport
+├── tests/                 # Comprehensive test suite
+│   ├── conftest.py        # Test configuration
+│   ├── fixtures.py        # Test fixtures
+│   ├── test_*.py          # Individual test modules
+│   └── README.md          # Testing documentation
+├── context.py             # Server context and state management
+├── server.py              # Main MCP server implementation
+├── main.py                # CLI entry point
+├── __init__.py            # Package initialization
+├── pyproject.toml         # Project configuration
+├── requirements.txt       # Dependencies
+└── README.md              # This documentation
+```
 
+### MCP (Model Context Protocol) Integration
 
-## 🛠️ Available Tools by Category
+This server implements the **Model Context Protocol** v1.0+, enabling AI models to interact with web browsers through a standardized interface:
 
-### Browser Core Tools (13 tools)
-- `browser_navigate` - Navigate to URLs
-- `browser_go_back` - Navigate back in history
-- `browser_reload` - Reload current page
-- `get_current_url` - Get current page URL and title
-- `browser_click` - Click elements by selector
-- `browser_fill` - Fill form fields (fast method)
-- `browser_type_advanced` - Type with delays and auto-submit
-- `browser_press_key` - Press keyboard keys
-- `browser_hover` - Hover over elements
-- `browser_find_by_xpath` - Find elements using XPath
-- `browser_select_option` - Select dropdown options
-- `clear_field` - Clear input field content
-- `browser_close` - Close browser with cleanup options
-- `browser_resize` - Resize browser window
-- `browser_install` - Install browser dependencies
+- **Tool Discovery**: Dynamic tool registration with 12 capability categories
+- **Structured Communication**: JSON-RPC 2.0 based message exchange
+- **Multiple Transports**: STDIO, WebSocket, and HTTP support
+- **Type Safety**: Full Pydantic validation for all inputs/outputs
+- **Vision Support**: Screenshot and accessibility-based interactions
 
-### Browser Advanced Tools (7 tools)
-- `browser_drag` - Drag and drop between elements
-- `browser_handle_dialog` - Handle alerts, confirms, prompts
-- `browser_console_messages` - Capture console logs and errors
-- `browser_scroll_to_top` - Scroll to page top
-- `browser_scroll_to_bottom` - Scroll to page bottom
-- `browser_scroll_to_element` - Scroll element into view
-- `browser_scroll_one_step` - Incremental scrolling
-- `browser_wait_for` - Wait for conditions (element visibility, text presence)
+## 🚀 Quick Start
 
-### Browser Data Tools (6 tools)
-- `get_page_content` - Extract visible text content
-- `get_page_html` - Get full HTML source
-- `get_page_title` - Get page title and URL
-- `clear_browser_data` - Clear cookies and storage
-- `get_cookies` - Retrieve all cookies
-- `browser_file_upload` - Upload files to input elements
+### Prerequisites
 
-### Browser Vision Tools (10 tools)
-- `browser_capture_for_vision` - Take screenshots for AI analysis
-- `browser_save_screenshot` - Save screenshots to files
-- `browser_save_as_pdf` - Export pages as PDF
-- `browser_screen_click` - Click at pixel coordinates
-- `browser_screen_drag` - Drag between coordinates
-- `browser_screen_move_mouse` - Move mouse to coordinates
-- `browser_tab_list` - List all open tabs
-- `browser_tab_new` - Open new tabs
-- `browser_tab_select` - Switch between tabs
-- `browser_tab_close` - Close specific tabs
+- **Python 3.11+** (Required)
+- **Playwright** browsers
+- **uv** (recommended) or pip for package management
 
-### API Tools (9 tools)
-- `api_init` - Initialize REST client
-- `api_get` - HTTP GET requests
-- `api_post` - HTTP POST requests
-- `api_put` - HTTP PUT requests
-- `api_delete` - HTTP DELETE requests
-- `api_basic_auth` - Basic authentication
-- `api_bearer_token` - Bearer token authentication
-- `api_oauth2_client_credentials` - OAuth2 client credentials flow
-- `api_clear_auth` - Clear authentication
+### Installation
 
-### Database Tools (9 tools)
-- `db_connect` - Connect to SQL Server
-- `db_connect_with_string` - Connect with custom connection string
-- `db_query` - Execute SELECT queries
-- `db_execute` - Execute INSERT/UPDATE/DELETE
-- `db_execute_many` - Batch execute with parameters
-- `db_execute_script` - Run multi-statement scripts
-- `db_get_tables` - List database tables
-- `db_get_columns` - Get table column information
-- `db_close` - Close database connection
-
-### Google Sheets Tools (7 tools)
-- `google_sheets_init` - Initialize with service account
-- `google_sheets_read` - Read sheet data
-- `google_sheets_write` - Write data to sheets
-- `google_sheets_append` - Append rows to sheets
-- `google_sheets_clear` - Clear sheet ranges
-- `google_sheets_create_sheet` - Create new sheet tabs
-- `google_sheets_get_sheets` - Get spreadsheet metadata
-
-## 📋 Requirements
-
-- **Python**: 3.11 or higher
-- **Operating System**: Windows, macOS, or Linux
-- **Memory**: Minimum 2GB RAM (4GB recommended)
-- **Disk Space**: 1GB for browser binaries and dependencies
-
-### Required Dependencies
-
-**Core Dependencies:**
-- `mcp[cli]>=1.8.0` - Model Context Protocol framework
-- `requests>=2.32.0` - HTTP client library
-- `nest-asyncio>=1.6.0` - Nested async loop support
-- `playwright>=1.52.0` - Browser automation
-- `psutil>=7.0.0` - System process management
-- `pyodbc>=5.2.0` - SQL Server database connectivity
-
-**Optional Dependencies:**
-- `google-auth>=2.40.0` - Google API authentication
-- `google-api-python-client>=2.169.0` - Google Sheets API
-
-## 🚀 Installation
-
-### Method 1: Using uv (Recommended)
+#### Using uv (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://gitlab.nexdev.net/victor.nguyen1/mcp_server_automation_framework.git
-cd mcp_server_automation_framework
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install uv if you haven't already
-pip install uv
+# Clone and setup
+git clone <repository-url>
+cd MCP_Server_Automation_Framework
 
 # Create virtual environment and install dependencies
 uv venv
-uv sync
-
-# Activate the virtual environment
-# On Windows:
-.venv\Scripts\activate
-# On macOS/Linux:
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
 
 # Install Playwright browsers
-playwright install chromium
-
-# Install additional browsers (optional)
-playwright install firefox webkit
+playwright install
 ```
 
-### Method 2: Using pip
+#### Using pip
 
 ```bash
-# Clone the repository
-git clone https://gitlab.nexdev.net/victor.nguyen1/mcp_server_automation_framework.git
-cd mcp_server_automation_framework
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-
-# Upgrade pip
-pip install --upgrade pip
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Install Playwright browsers
-playwright install chromium
-
-# Install additional browsers (optional)
-playwright install firefox webkit
+playwright install
 ```
 
-### Method 3: Using Docker
+### Basic Usage
 
+#### 1. STDIO Mode (Default for MCP)
 ```bash
-# Clone the repository
-git clone https://gitlab.nexdev.net/victor.nguyen1/mcp_server_automation_framework.git
-cd mcp_server_automation_framework
+# Run with default settings
+python main.py
 
-# Build Docker image
-docker build -t mcp-automation-framework .
+# Run with specific browser and capabilities
+python main.py --browser firefox --headless --caps "core,vision,interaction"
 
-# Run container
-docker run -p 5000:5000 mcp-automation-framework
+# Enable vision mode
+python main.py --vision --caps "core,vision"
 ```
 
-## ⚙️ Configuration
+#### 2. WebSocket Mode
+```bash
+python main.py --transport websocket --port 8765
+```
+
+#### 3. HTTP Mode
+```bash
+python main.py --transport http --port 8080
+```
+
+#### 4. List Available Capabilities
+```bash
+python main.py --list-capabilities
+```
+
+## 📋 Configuration System
+
+### Available Tool Capabilities
+
+The framework provides 13 distinct capability categories:
+
+| Capability | Description | Tool Count |
+|------------|-------------|------------|
+| `core` | Basic navigation, resize, close | Always enabled |
+| `vision` | Screenshots, visual interactions | 8 tools |
+| `tabs` | Tab management, creation, switching | 4 tools |
+| `console` | Console message handling | 2 tools |
+| `keyboard` | Keyboard input and key pressing | 1 tool |
+| `network` | Request interception, monitoring | 2 tools |
+| `files` | File upload and download | 1 tool |
+| `testing` | Test code generation | 1 tool |
+| `wait` | Wait conditions and timing | 3 tools |
+| `pdf` | PDF generation | 1 tool |
+| `history` | Browser navigation history | 2 tools |
+| `install` | Installation utilities | 0 tools |
+| `api` | HTTP API testing and requests | 7 tools |
+
+### Configuration Hierarchy
+
+1. **Default Configuration** (`config/settings.py`)
+2. **Configuration Files** (JSON format via `--config`)
+3. **Environment Variables** (MCP_* prefix)
+4. **CLI Arguments** (highest priority)
 
 ### Environment Variables
 
 ```bash
-# Server configuration
-SERVER_HOST=127.0.0.1                    # Server host address
-SERVER_PORT=5000                         # Server port number
-SERVER_DEBUG=false                       # Enable debug mode
-
-# Browser configuration  
-BROWSER_TYPE=chromium                    # Browser type (chromium, firefox, webkit)
-BROWSER_HEADLESS=false                   # Run browser in headless mode
-BROWSER_VIEWPORT_WIDTH=1200              # Browser window width
-BROWSER_VIEWPORT_HEIGHT=900              # Browser window height
-
-# Database configuration
-DATABASE_DRIVER="ODBC Driver 17 for SQL Server"  # SQL Server driver
-DATABASE_CONNECTION_TIMEOUT=30                   # Connection timeout (seconds)
-DATABASE_QUERY_TIMEOUT=30                       # Query timeout (seconds)
-
-# API configuration
-API_REQUEST_TIMEOUT=30                   # API request timeout (seconds)
-API_MAX_RETRIES=3                       # Maximum retry attempts
-
-# File system configuration
-OUTPUT_DIRECTORY=./output               # Output directory for files
-SCREENSHOTS_DIRECTORY=./output/screenshots  # Screenshot save location
-PDFS_DIRECTORY=./output/pdfs           # PDF save location
+export MCP_BROWSER_TYPE=firefox
+export MCP_HEADLESS=true
+export MCP_ENABLE_VISION=true
+export MCP_OUTPUT_DIR=/path/to/output
+export MCP_CDP_ENDPOINT=ws://localhost:9222
 ```
 
-### Google Sheets Setup
-
-1. **Create a Google Cloud Project:**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select existing one
-   - Enable Google Sheets API and Google Drive API
-
-2. **Create Service Account:**
-   - Go to IAM & Admin > Service Accounts
-   - Click "Create Service Account"
-   - Fill in service account details
-   - Download the JSON key file
-
-3. **Configure Credentials:**
-   - Place the JSON key file in `mcp_server/keys/service-account.json`
-   - Or specify custom path when initializing
-
-4. **Share Spreadsheets:**
-   - Share your Google Sheets with the service account email
-   - Grant appropriate permissions (Viewer/Editor)
-
-## 🚀 Usage
-
-### Starting the Server
+### CLI Options
 
 ```bash
-# Basic startup
-python server.py
+# Browser Configuration
+--browser {chrome,firefox,webkit,chromium,msedge,...}
+--headless                    # Run in headless mode
+--executable-path PATH        # Custom browser executable
+--user-data-dir PATH         # Custom profile directory
+--device DEVICE              # Device emulation (e.g., "iPhone 15")
+--viewport-size SIZE         # Viewport size (e.g., "1280,720")
 
-# Custom host and port
-python server.py --host 0.0.0.0 --port 8080
+# Server Configuration
+--host HOST                  # Server host (default: localhost)
+--port PORT                  # Server port
+--transport {stdio,websocket,http}  # Transport method
 
-# Enable debug mode
-python server.py --debug
+# Capabilities & Features
+--caps CAPS                  # Comma-separated capabilities
+--vision                     # Enable vision mode
+--image-responses {allow,omit,auto}  # Image response handling
 
-# Using environment variables
-export SERVER_HOST=0.0.0.0
-export SERVER_PORT=8080
-python server.py
+# Network & Security
+--proxy-server PROXY         # Proxy configuration
+--proxy-bypass BYPASS        # Proxy bypass domains
+--allowed-origins ORIGINS    # Allowed request origins
+--blocked-origins ORIGINS    # Blocked request origins
+--block-service-workers      # Block service workers
+--ignore-https-errors        # Ignore HTTPS errors
+
+# Advanced Options
+--cdp-endpoint ENDPOINT      # Connect to existing browser
+--save-trace                 # Save Playwright traces
+--output-dir PATH           # Output directory
+--isolated                  # In-memory browser profile
+--no-sandbox               # Disable sandbox (use with caution)
 ```
 
-### Server Endpoints
+## 🛠️ Core Components
 
-- **SSE Endpoint**: `http://localhost:5000/sse` - Main MCP communication
-- **Messages**: `http://localhost:5000/messages/` - Message handling
-- **Health Check**: `http://localhost:5000/health` - Server status
-- **Tools List**: `http://localhost:5000/tools` - Available tools information
+### 1. Server Context (`context.py`)
 
-### Example Usage Scenarios
-
-#### 1. Browser Automation
+The `ServerContext` class manages the complete server state:
 
 ```python
-# Connect to MCP server and use browser tools
-# Navigate to a website
-await mcp.call_tool("browser_navigate", {"url": "https://example.com"})
-
-# Click an element
-await mcp.call_tool("browser_click", {"selector": "#login-button"})
-
-# Fill a form
-await mcp.call_tool("browser_fill", {"selector": "#username", "text": "user@example.com"})
-
-# Take a screenshot
-await mcp.call_tool("browser_capture_for_vision", {"full_page": true})
+class ServerContext:
+    """Enhanced server context matching Playwright MCP's Context functionality."""
+    
+    def __init__(self, settings: Settings, capabilities: Optional[List[str]] = None):
+        self.settings = settings
+        self.client_version: Optional[str] = None
+        self._browser_context_manager = get_browser_context_manager(settings)
+        self._tabs: List[Tab] = []
+        self._modal_states: List[ModalStateWithTab] = []
+        self._download_tracker = DownloadTracker(settings.output_dir)
+        self._pending_action: Optional[Dict[str, Any]] = None
+        self.tool_registry = EnhancedToolRegistry(self, capabilities)
 ```
 
-#### 2. API Testing
+**Key Features:**
+- TypeScript-compatible context management
+- Modal state tracking (dialogs, file choosers)
+- Download state management
+- Tab lifecycle management
+- Client capability detection
+- Racing modal dialog protection
+
+### 2. Tool System (`tools/`)
+
+#### Tool Registry (`tools/registry.py`)
+
+Dynamic tool management with vision mode support:
 
 ```python
-# Initialize API client
-await mcp.call_tool("api_init", {"base_url": "https://api.example.com"})
-
-# Set authentication
-await mcp.call_tool("api_bearer_token", {"token": "your-api-token"})
-
-# Make API requests
-await mcp.call_tool("api_get", {"endpoint": "/users"})
-await mcp.call_tool("api_post", {"endpoint": "/users", "json_data": {"name": "John Doe"}})
+class EnhancedToolRegistry:
+    """Enhanced tool registry matching Playwright MCP's tool management."""
+    
+    def __init__(self, context: "ServerContext", capabilities: Optional[List[ToolCapability]] = None):
+        # Create tools based on vision mode
+        vision_mode = context.settings.enable_vision
+        self._snapshot_tools = self._create_snapshot_tools()  # 30 tools
+        self._vision_tools = self._create_vision_tools()      # 30 tools
+        
+        # Select appropriate tool set
+        all_tools = self._vision_tools if vision_mode else self._snapshot_tools
+        self._tools = filter_tools_by_capabilities(all_tools, capabilities)
 ```
 
-#### 3. Database Operations
+#### Tool Categories
+
+**Core Tools** (`tools/core.py`):
+- `browser_navigate`: URL navigation with timeout handling
+- `browser_close`: Browser cleanup and resource management
+- `browser_resize`: Viewport and window resizing
+- `browser_go_back`: Browser history navigation
+- `browser_go_forward`: Forward navigation
+
+**Interaction Tools** (`tools/interaction.py`):
+- `browser_click`: Element clicking with coordinate support
+- `browser_type`: Text input with submission options
+- `browser_hover`: Mouse hover interactions
+- `browser_select_option`: Dropdown and select interactions
+- `browser_drag`: Drag and drop operations
+- `browser_get_text`: Text extraction from elements
+
+**Vision Tools** (`tools/vision.py`):
+- `browser_screenshot`: Full page and viewport screenshots
+- `browser_save_screenshot`: File-based screenshot saving
+- `browser_screen_click`: Coordinate-based clicking
+- `browser_capture_snapshot`: Accessibility tree capture
+
+**Advanced Tools**:
+- **Tab Management** (`tools/tabs.py`): Tab creation, switching, closing
+- **Console Handling** (`tools/console.py`): Console message management
+- **Network Tools** (`tools/network.py`): Request interception
+- **File Operations** (`tools/files.py`): Upload and download
+- **Wait Conditions** (`tools/wait.py`): Complex waiting scenarios
+- **Keyboard Input** (`tools/keyboard.py`): Key press simulation
+- **Dialog Handling** (`tools/dialogs.py`): Alert, confirm, prompt dialogs
+- **PDF Generation** (`tools/pdf.py`): Page to PDF conversion
+- **Testing Utilities** (`tools/testing.py`): Test code generation
+
+### 3. Browser Context Factory (`core/browser_context_factory.py`)
+
+Multiple browser context creation strategies:
 
 ```python
-# Connect to SQL Server
-await mcp.call_tool("db_connect", {
-    "server": "localhost",
-    "database": "TestDB",
-    "trusted_connection": true
-})
-
-# Execute queries
-await mcp.call_tool("db_query", {"query": "SELECT * FROM Users"})
-await mcp.call_tool("db_execute", {"query": "INSERT INTO Users (name) VALUES (?)", "params": ["John Doe"]})
+class BrowserContextFactory(ABC):
+    """Abstract browser context factory matching Playwright MCP patterns."""
+    
+# Available Implementations:
+# - IsolatedContextFactory: Fresh browser instances
+# - PersistentContextFactory: Persistent user data
+# - CDPContextFactory: Connect to existing browser via CDP
 ```
 
-#### 4. Google Sheets Integration
+### 4. Snapshot System (`core/snapshot.py`)
+
+Advanced page analysis with TypeScript compatibility:
 
 ```python
-# Initialize Google Sheets
-await mcp.call_tool("google_sheets_init", {"credentials_file": "path/to/service-account.json"})
-
-# Read data
-await mcp.call_tool("google_sheets_read", {
-    "spreadsheet_id": "your-spreadsheet-id",
-    "range_name": "Sheet1!A1:D10"
-})
-
-# Write data
-await mcp.call_tool("google_sheets_write", {
-    "spreadsheet_id": "your-spreadsheet-id",
-    "range_name": "Sheet1!A1",
-    "data": [["Name", "Age"], ["John", 30], ["Jane", 25]]
-})
+class PageSnapshot:
+    """Page snapshot with accessibility tree and element references."""
+    
+    async def capture(self, include_screenshot: bool = True) -> None:
+        """Capture comprehensive page snapshot."""
+        await self._capture_accessibility_tree()
+        await self._capture_element_references()
+        if include_screenshot:
+            await self._capture_screenshot()
 ```
 
-## 🔧 Advanced Configuration
+### 5. Transport Layer (`transports/`)
 
-### Custom Settings
+#### WebSocket Transport (`transports/websocket.py`)
+```python
+async def websocket_server(scope: Scope, receive: Receive, send: Send):
+    """WebSocket transport for real-time MCP communication."""
+```
 
-Modify `mcp_server/config/settings.py` to customize:
+#### HTTP Transport (`transports/streamable_http.py`)
+```python
+class StreamableHTTPServerTransport:
+    """HTTP transport with streaming support and session management."""
+```
 
-- **Timeouts**: Navigation, click, API, database timeouts
-- **Limits**: URL length, selector length, XPath length
-- **Browser Settings**: Viewport size, wait strategies
-- **File Paths**: Output directories, naming patterns
-- **Security**: Allowed/blocked domains, validation rules
+## 🧪 Testing Framework
 
-### Performance Tuning
+### Test Coverage
+
+Comprehensive testing with **19 test files** covering all components:
+
+```
+tests/
+├── test_core.py              # Core browser functionality
+├── test_enhanced_interaction.py  # Advanced interactions
+├── test_console.py           # Console message handling
+├── test_files.py             # File operations
+├── test_keyboard.py          # Keyboard input
+├── test_network.py           # Network interception
+├── test_pdf.py               # PDF generation
+├── test_testing.py           # Testing utilities
+├── test_wait.py              # Wait conditions
+├── test_config.py            # Configuration system
+├── test_capabilities.py      # Capability filtering
+├── test_dialogs.py           # Dialog handling
+├── test_integration.py       # End-to-end integration
+├── test_screenshot.py        # Screenshot functionality
+├── test_server.py            # MCP server functionality
+├── test_tabs.py              # Tab management
+├── conftest.py               # Test configuration
+└── fixtures.py               # Test fixtures
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test category
+pytest tests/test_core.py -v
+
+# Run with coverage
+pytest --cov=. --cov-report=html
+
+# Run integration tests
+pytest -m integration
+
+# Run in parallel
+pytest -n auto
+```
+
+## 🔧 Tool Development
+
+### Tool Definition Pattern
 
 ```python
-# Concurrent operations limits
-MAX_CONCURRENT_BROWSERS = 3
-MAX_CONCURRENT_API_REQUESTS = 10
-MAX_CONCURRENT_DB_CONNECTIONS = 5
+from tools.tool_schema import define_tool, ToolCapability, ToolType
+from tools.schemas import YourInputSchema
 
-# Memory limits
-MAX_PAGE_SIZE_MB = 100
-MAX_RESPONSE_SIZE_MB = 50
+@define_tool(
+    capability=ToolCapability.INTERACTION,
+    name="your_tool_name",
+    title="Your Tool Title",
+    description="Tool description",
+    input_schema=YourInputSchema,
+    tool_type=ToolType.DESTRUCTIVE,
+)
+async def your_tool(context: ServerContext, params: Dict[str, Any]) -> ToolResult:
+    validated_params = validate_tool_input(YourInputSchema, params)
+    
+    # Tool implementation
+    code = ["await page.yourAction();"]
+    
+    async def action() -> ToolActionResult:
+        # Action implementation
+        return ToolActionResult(content=[...])
+    
+    return ToolResult(
+        code=code,
+        action=action,
+        capture_snapshot=True,
+        wait_for_network=True
+    )
 ```
 
-## 🔒 Security Considerations
+### Adding New Capabilities
+
+1. Add capability to `ToolCapability` enum in `tools/tool_schema.py`
+2. Create tool module in `tools/your_capability.py`
+3. Implement `get_your_capability_tools()` function
+4. Add import to `tools/__init__.py`
+5. Update tool registry in `tools/registry.py`
+
+## 🔌 Integration Examples
+
+### Python MCP Client
+
+```python
+import asyncio
+from mcp.client.session import ClientSession
+from mcp.client.stdio import stdio_client
+
+async def main():
+    async with stdio_client(["python", "main.py", "--headless"]) as (read, write):
+        async with ClientSession(read, write) as session:
+            # Initialize MCP session
+            await session.initialize()
+            
+            # List available tools
+            tools = await session.list_tools()
+            print(f"Available tools: {[tool.name for tool in tools.tools]}")
+            
+            # Navigate to a page
+            result = await session.call_tool("browser_navigate", {
+                "url": "https://example.com"
+            })
+            
+            # Take screenshot
+            screenshot = await session.call_tool("browser_screenshot", {
+                "full_page": True
+            })
+            
+            # Interact with elements
+            click_result = await session.call_tool("browser_click", {
+                "element": "Submit button",
+                "ref": "button[type='submit']"
+            })
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### WebSocket Client
+
+```python
+import asyncio
+import websockets
+import json
+
+async def websocket_example():
+    uri = "ws://localhost:8765"
+    async with websockets.connect(uri) as websocket:
+        # List tools
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {}
+        }
+        await websocket.send(json.dumps(request))
+        
+        response = await websocket.recv()
+        tools = json.loads(response)
+        print(f"Available tools: {tools}")
+
+asyncio.run(websocket_example())
+```
+
+## 📊 Performance Features
+
+### TypeScript Compatibility
+
+- **100% API compatibility** with playwright-mcp TypeScript implementation
+- **Identical tool schemas** and response formats
+- **Matching modal dialog racing** and network waiting behavior
+- **Compatible snapshot and vision systems**
+
+### Async Performance
+
+- **Concurrent tool execution** support
+- **Non-blocking network operations** with proper timeout handling
+- **Efficient browser context pooling**
+- **Optimized screenshot and snapshot capture**
+
+### Resource Management
+
+- **Automatic tab cleanup** and memory management
+- **Download state tracking** with cleanup
+- **Modal state management** with racing protection
+- **Browser context lifecycle** management
+
+## 🛡️ Security Features
+
+### Network Security
+
+```bash
+# Origin restrictions
+python main.py --allowed-origins "https://trusted.com;https://safe.com"
+python main.py --blocked-origins "https://malicious.com"
+
+# Service worker blocking
+python main.py --block-service-workers
+```
 
 ### Browser Security
-- Browsers run in controlled environment
-- Domain filtering available for blocking malicious sites
-- Headless mode recommended for production
 
-### Database Security
-- Uses parameterized queries to prevent SQL injection
-- Connection string encryption recommended
-- Limited connection timeouts
-
-### API Security
-- Supports multiple authentication methods
-- Request/response size limits
-- Rate limiting capabilities
-
-### Google Sheets Security
-- Service account authentication (no user credentials stored)
-- Scoped API access
-- Automatic token refresh
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Browser Installation Problems
 ```bash
-# Reinstall Playwright browsers
-playwright install --force chromium
+# Isolated sessions
+python main.py --isolated
 
-# Install system dependencies (Linux)
-playwright install-deps chromium
+# Custom user data directory
+python main.py --user-data-dir /secure/path
+
+# Sandbox control (use with caution)
+python main.py --no-sandbox
 ```
 
-#### Database Connection Issues
-```bash
-# Install ODBC driver for SQL Server
-# Windows: Download from Microsoft
-# Linux: apt-get install unixodbc-dev
-# macOS: brew install unixodbc
-```
+### Transport Security
 
-#### Google Sheets Authentication
-```bash
-# Verify service account file
-python -c "import json; print(json.load(open('path/to/service-account.json'))['client_email'])"
+- **Input validation** with Pydantic schemas
+- **Origin validation** for web transports
+- **Session management** with proper cleanup
+- **Error sanitization** to prevent information leakage
 
-# Check API enablement in Google Cloud Console
-# Ensure Sheets API and Drive API are enabled
-```
+## 🐛 Debugging and Troubleshooting
 
 ### Debug Mode
 
-Enable debug mode for detailed logging:
-
 ```bash
-python server.py --debug
+# Enable verbose logging
+python main.py --verbose
+
+# Save browser traces
+python main.py --save-trace --output-dir ./traces
+
+# Run in headed mode for visual debugging
+python main.py --headless=false
 ```
 
-### Log Files
+### Common Issues
 
-Check log files in `/app/logs/` directory:
-- Application logs
-- Error traces
-- Performance metrics
+1. **Browser Installation**:
+   ```bash
+   playwright install chromium
+   ```
+
+2. **CDP Connection**:
+   ```bash
+   # Start browser with remote debugging
+   google-chrome --remote-debugging-port=9222
+   python main.py --cdp-endpoint ws://localhost:9222
+   ```
+
+3. **Permission Issues on Linux**:
+   ```bash
+   playwright install-deps
+   ```
+
+4. **Port Conflicts**:
+   ```bash
+   python main.py --transport websocket --port 8081
+   ```
+
+## 📈 API Reference
+
+### Tool Response Format
+
+All tools return responses in this format:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "- Ran Playwright code:\n```js\nawait page.goto('https://example.com');\n```\n\n- Page URL: https://example.com\n- Page Title: Example Domain"
+    }
+  ]
+}
+```
+
+### Error Response Format
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Error executing tool browser_navigate: Navigation timeout after 30 seconds"
+    }
+  ]
+}
+```
+
+### Vision Mode Screenshots
+
+When vision mode is enabled, screenshots are included:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Screenshot captured successfully"
+    },
+    {
+      "type": "image",
+      "data": "base64-encoded-image-data",
+      "mimeType": "image/png"
+    }
+  ]
+}
+```
+
+## 🚀 Deployment
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget gnupg && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Install Playwright
+RUN playwright install chromium && \
+    playwright install-deps chromium
+
+# Copy application
+COPY . /app
+WORKDIR /app
+
+# Expose port for HTTP transport
+EXPOSE 8080
+
+# Run server
+CMD ["python", "main.py", "--transport", "http", "--host", "0.0.0.0", "--port", "8080", "--headless"]
+```
+
+### Production Configuration
+
+```bash
+# Production settings
+python main.py \
+  --transport http \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --headless \
+  --isolated \
+  --caps "core,vision,interaction" \
+  --output-dir /var/log/mcp-server \
+  --save-trace
+```
 
 ## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ### Development Setup
 
 ```bash
-# Install development dependencies
-uv add --dev pytest black flake8 mypy
+git clone <repository-url>
+cd MCP_Server_Automation_Framework
+
+# Setup development environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+playwright install
+
+# Install development tools
+pip install black ruff mypy pytest-cov
 
 # Run tests
-pytest tests/
+pytest
+```
 
-# Code formatting
-black mcp_server/
-flake8 mcp_server/
+### Code Standards
 
-# Type checking
-mypy mcp_server/
+- **Python 3.11+ compatibility**
+- **Type hints** for all public APIs
+- **Pydantic validation** for all inputs
+- **Async/await** patterns throughout
+- **100% test coverage** for new features
+
+## 📄 Dependencies
+
+### Core Dependencies
+
+```
+mcp>=1.0.0                    # Model Context Protocol
+playwright>=1.40.0            # Browser automation
+pydantic>=2.0.0              # Data validation
+anyio>=4.0.0                 # Async primitives
+starlette>=0.27.0            # Web framework
+uvicorn>=0.24.0              # ASGI server
+websockets>=12.0             # WebSocket support
+```
+
+### Development Dependencies
+
+```
+pytest>=7.4.0                # Testing framework
+pytest-asyncio>=0.21.0       # Async test support
+pytest-mock>=3.11.0          # Mocking utilities
+black                        # Code formatting
+ruff                         # Fast linting
+mypy                         # Type checking
 ```
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
 
-## 🏗️ Architecture
+## 🙏 Acknowledgments
 
-### Core Components
+- **Playwright Team**: Excellent browser automation framework
+- **MCP Protocol**: Standardized AI-browser communication
+- **Python Community**: Robust ecosystem and tooling
+- **TypeScript playwright-mcp**: Reference implementation for compatibility
 
-1. **MCP Server**: FastMCP-based server with SSE transport
-2. **Service Context**: Shared state management across tools
-3. **Playwright Manager**: Singleton browser instance management
-4. **Configuration System**: Centralized settings with validation
-5. **Tool Registration**: Automatic discovery and registration of MCP tools
-
-
-## 🔄 Version History
-
-### v1.0.0 (Current)
-- Initial release with full MCP automation framework
-- Browser automation with Playwright
-- REST API testing capabilities
-- SQL Server database integration
-- Google Sheets API support
-- SSE-based transport
-
-## 🎯 Roadmap
-
-### Planned Features
-- [ ] Built-in test recording and playback
-- [ ] Mobile browser automation support
 ---
 
-**MCP Server Automation Framework** - Empowering automation through Model Context Protocol
+**Built with ❤️ using Python 3.11+, Playwright, and the Model Context Protocol**
+
+*This implementation achieves 100% compatibility with the TypeScript playwright-mcp while providing additional Python-specific enhancements and comprehensive testing coverage.*
+
+# MCP Client Framework
+
+## 🎯 Testing với MCP Server Automation Framework
+
+Framework này được thiết kế để kết nối với **MCP Server Automation Framework** (browser automation server) của bạn.
+
+### 📋 Hướng Dẫn Test Đầy Đủ
+
+#### **Bước 1: Khởi động MCP Server của bạn**
+
+```bash
+# Khởi động MCP Server Automation Framework
+python start_mcp_server.py
+```
+
+Server sẽ chạy trên:
+- **HTTP/SSE**: `http://localhost:8000`
+- **WebSocket**: `ws://localhost:8765`
+
+#### **Bước 2: Test tất cả Transport Types**
+
+```bash
+# Test nhanh tất cả transport
+python test_all_transports.py
+
+# Test đầy đủ với báo cáo chi tiết
+python complete_test_guide.py
+```
+
+#### **Bước 3: Test Web Interface**
+
+```bash
+# Khởi động API server (terminal 1)
+python run_server.py
+
+# Khởi động Web UI (terminal 2)  
+streamlit run run_ui.py
+```
+
+Mở browser: `http://localhost:8501`
+
+### 🔧 Cấu Hình Transport Types
+
+#### **SSE (Server-Sent Events) - Recommended**
+```python
+config = MCPConfig.for_sse(
+    server_url="http://localhost:8000/sse",
+    timeout=30.0
+)
+```
+
+#### **WebSocket - Real-time**
+```python
+config = MCPConfig.for_websocket(
+    server_url="ws://localhost:8765",
+    timeout=30.0
+)
+```
+
+#### **StreamableHTTP - Alternative**
+```python
+config = MCPConfig.for_streamablehttp(
+    server_url="http://localhost:8000/mcp",
+    timeout=30.0
+)
+```
+
+### 🎮 Browser Automation Tools
+
+Server cung cấp các tools cho browser automation:
+
+- **Core**: `browser_navigate`, `browser_close`, `browser_resize`
+- **Interaction**: `browser_click`, `browser_type`, `browser_hover`
+- **Vision**: `browser_screenshot`, `browser_capture_snapshot`
+- **Tabs**: Tab management tools
+- **Files**: Upload/download tools
+- **Network**: Request interception
+
+### 📊 Test Results
+
+Sau khi chạy test, bạn sẽ thấy:
+
+```
+============================================================
+🚀 TEST SUMMARY REPORT
+============================================================
+
+📊 Overall Results:
+   • Total Transports Tested: 3
+   • Successful Connections: 3
+   • Success Rate: 100.0%
+
+Transport Details
+------------------------------------------------------------
+
+SSE (Server-Sent Events) : ✅ PASS
+   Server: MCP Server Automation Framework
+   Tools: 30 total, 12 browser tools
+   ✅ Browser navigation test passed
+
+WebSocket                : ✅ PASS
+   Server: MCP Server Automation Framework  
+   Tools: 30 total, 12 browser tools
+   ✅ Browser navigation test passed
+
+StreamableHTTP           : ✅ PASS
+   Server: MCP Server Automation Framework
+   Tools: 30 total, 12 browser tools
+```
+
+### 🚀 Production Usage
+
+#### **Direct Client Usage**
+```python
+from mcp_framework.core.config import MCPConfig
+from mcp_framework.core.client_advanced import MCPClientAdvanced
+
+# Connect to your browser automation server
+config = MCPConfig.for_sse("http://localhost:8000/sse")
+client = MCPClientAdvanced(config)
+
+await client.connect()
+
+# Use browser automation tools
+result = await client.call_tool("browser_navigate", {
+    "url": "https://example.com"
+})
+
+result = await client.call_tool("browser_screenshot", {
+    "full_page": True
+})
+
+await client.disconnect()
+```
+
+#### **API Server Integration**
+```bash
+# Start API server
+python run_server.py
+
+# Connect via REST API
+curl -X POST http://localhost:8001/api/v1/connect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transport": "sse",
+    "server_url": "http://localhost:8000/sse"
+  }'
+```
+
+### 🏗️ Architecture
+
+- **Core**: `MCPClientAdvanced`, `MCPConfig`, Transport Factory
+- **Transports**: SSE, WebSocket, StreamableHTTP support
+- **API**: FastAPI REST interface on port 8001
+- **UI**: Streamlit web interface on port 8501  
+- **AI**: Gemini integration for chat interface
+
+### 📝 Configuration
+
+Environment variables:
+```bash
+export GEMINI_API_KEY=your_api_key
+export MCP_SERVER_URL=http://localhost:8000
+export API_SERVER_PORT=8001
+```
+
+### 🐛 Troubleshooting
+
+**Server not responding:**
+```bash
+# Check if your MCP server is running
+python start_mcp_server.py
+
+# Check ports
+netstat -an | grep :8000
+netstat -an | grep :8765
+```
+
+**Transport failed:**
+- SSE: Check `http://localhost:8000/sse`
+- WebSocket: Check `ws://localhost:8765`
+- Check firewall settings
+
+**Performance:**
+- SSE: Best for most cases
+- WebSocket: Real-time updates
+- StreamableHTTP: Alternative if SSE fails

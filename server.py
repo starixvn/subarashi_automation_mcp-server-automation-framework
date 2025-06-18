@@ -1,200 +1,267 @@
-"""
-Main entry point for MCP Server.
-Provides an SSE-based server for interacting with MCP tools.
-"""
-
-from mcp_server.core.mcp_setup import mcp
-from mcp_server.config.settings import settings
-import argparse
-import os
-import uvicorn
+import asyncio
 import logging
-from starlette.applications import Starlette
-from starlette.routing import Mount, Route
-from starlette.requests import Request
-from starlette.responses import Response, JSONResponse
-from mcp.server.sse import SseServerTransport
+from typing import Any, Dict, List, Optional
 
-logging.basicConfig(
-    level=getattr(logging, settings.SERVER_LOG_LEVEL),
-    format=settings.LOG_FORMAT,
-    datefmt=settings.LOG_DATE_FORMAT
+import anyio
+from mcp.server import Server
+from mcp.server.models import InitializationOptions
+from mcp.types import (
+    ServerCapabilities,
+    Implementation,
+    Tool,
+    TextContent,
+    CallToolResult,
+    ImageContent,
 )
+
+from config.settings import Settings
+from context import ServerContext
+
 logger = logging.getLogger(__name__)
 
 
-def create_starlette_app(*, debug: bool = None) -> Starlette:
-    """Create a Starlette application with SSE transport for MCP server."""
-    sse = SseServerTransport("/messages/")
-    
-    debug = debug if debug is not None else settings.SERVER_DEBUG
+def create_server(
+    settings: Optional[Settings] = None, capabilities: Optional[List[str]] = None
+) -> Server:
+    if settings is None:
+        settings = Settings()
 
-    async def handle_sse(request: Request):
-        """Handle SSE connections following the exact pattern from mcp library documentation."""
-        async with sse.connect_sse(
-            request.scope,
-            request.receive,
-            request._send,
-        ) as (read_stream, write_stream):
-            await mcp._mcp_server.run(
-                read_stream,
-                write_stream,
-                mcp._mcp_server.create_initialization_options(),
+    context = ServerContext(settings, capabilities=capabilities)
+
+    server = Server("mcp-automation-server")
+
+    @server.list_tools()
+    async def list_tools() -> List[Tool]:
+        tools_schema = context.tool_registry.get_mcp_tools_schema()
+        return [
+            Tool(
+                name=tool_schema["name"],
+                description=tool_schema["description"],
+                inputSchema=tool_schema["inputSchema"],
             )
-        return Response()
+            for tool_schema in tools_schema
+        ]
 
-    async def health_check(request: Request):
-        """Enhanced health check endpoint."""
-        return JSONResponse({
-            "status": "healthy",
-            "service": "Automation Testing Framework",
-            "version": "1.0.0",
-            "mcp_version": "latest",
-            "transport": "sse",
-            "endpoints": {
-                "sse": "/sse",
-                "messages": "/messages/",
-                "health": "/health",
-                "tools": "/tools"
-            },
-            "settings": {
-                "browser_type": settings.BROWSER_TYPE,
-                "browser_headless": settings.BROWSER_HEADLESS,
-                "viewport": f"{settings.BROWSER_VIEWPORT_WIDTH}x{settings.BROWSER_VIEWPORT_HEIGHT}",
-                "max_concurrent_browsers": settings.MAX_CONCURRENT_BROWSERS
-            }
-        })
-
-    async def list_tools(request: Request):
-        """API endpoint to list available tools."""
+    @server.call_tool()
+    async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         try:
-            tools_info = {
-                "browser_core_tools": [
-                    "browser_navigate", "browser_go_back", "browser_reload", "get_current_url",
-                    "browser_click", "browser_fill", "browser_type_advanced", "browser_press_key", 
-                    "browser_hover", "browser_find_by_xpath", "browser_select_option", "clear_field",
-                    "browser_close", "browser_resize", "browser_install"
-                ],
-                "browser_advanced_tools": [
-                    "browser_drag", "browser_handle_dialog", "browser_console_messages",
-                    "browser_scroll_to_top", "browser_scroll_to_bottom", "browser_scroll_to_element", "browser_scroll_one_step",
-                    "browser_wait_for"
-                ],
-                "browser_data_tools": [
-                    "get_page_content", "get_page_html", "get_page_title",
-                    "clear_browser_data", "get_cookies",
-                    "browser_file_upload"
-                ],
-                "browser_vision_tools": [
-                    "browser_capture_for_vision", "browser_save_screenshot", "browser_save_as_pdf",
-                    "browser_screen_click", "browser_screen_drag", "browser_screen_move_mouse",
-                    "browser_tab_list", "browser_tab_new", "browser_tab_select", "browser_tab_close"
-                ],
-                "api_tools": [
-                    "api_init", "api_get", "api_post", "api_put", "api_delete",
-                    "api_basic_auth", "api_bearer_token", "api_oauth2_client_credentials", "api_clear_auth"
-                ],
-                "database_tools": [
-                    "db_connect", "db_connect_with_string", "db_query", "db_execute", "db_execute_many",
-                    "db_execute_script", "db_get_tables", "db_get_columns", "db_close"
-                ],
-                "google_tools": [
-                    "google_sheets_init", "google_sheets_read", "google_sheets_write",
-                    "google_sheets_append", "google_sheets_clear", "google_sheets_create_sheet", "google_sheets_get_sheets"
+            tool_info = next(
+                (
+                    tool
+                    for tool in await context.tool_registry.list_tools()
+                    if tool["name"] == name
+                ),
+                None,
+            )
+
+            if not tool_info:
+                return [TextContent(type="text", text=f'Tool "{name}" not found')]
+
+            modal_states = [state.type for state in context.modal_states()]
+
+            tool_clears_modal = tool_info.get("clearsModalState")
+            if tool_clears_modal and tool_clears_modal not in modal_states:
+                error_messages = [
+                    f'The tool "{name}" can only be used when there is related modal state present.'
                 ]
-            }
-            
-            return JSONResponse({
-                "framework": "MCP Automation Testing Framework",
-                "total_tools": sum(len(tools) for tools in tools_info.values()),
-                "tools_by_category": tools_info,
-                "tool_counts": {
-                    "browser_core_tools": len(tools_info["browser_core_tools"]),
-                    "browser_advanced_tools": len(tools_info["browser_advanced_tools"]), 
-                    "browser_data_tools": len(tools_info["browser_data_tools"]),
-                    "browser_vision_tools": len(tools_info["browser_vision_tools"]),
-                    "api_tools": len(tools_info["api_tools"]),
-                    "database_tools": len(tools_info["database_tools"]),
-                    "google_tools": len(tools_info["google_tools"])
-                },
-                "configuration": {
-                    "timeouts": {
-                        "browser_navigation": settings.BROWSER_NAVIGATION_TIMEOUT,
-                        "browser_click": settings.BROWSER_CLICK_TIMEOUT,
-                        "api_request": settings.API_REQUEST_TIMEOUT,
-                        "database_query": settings.DATABASE_QUERY_TIMEOUT
-                    },
-                    "limits": {
-                        "max_url_length": settings.MAX_URL_LENGTH,
-                        "max_selector_length": settings.MAX_SELECTOR_LENGTH,
-                        "max_xpath_length": settings.MAX_XPATH_LENGTH
-                    }
-                }
-            })
+                error_messages.extend(context.modal_states_markdown())
+                return [TextContent(type="text", text="\n".join(error_messages))]
+
+            if not tool_clears_modal and modal_states:
+                error_messages = [f'Tool "{name}" does not handle the modal state.']
+                error_messages.extend(context.modal_states_markdown())
+                return [TextContent(type="text", text="\n".join(error_messages))]
+
+            result = await context.tool_registry.execute_tool(name, arguments)
+
+            content = []
+            if result and result.content:
+                for item in result.content:
+                    if item.get("type") == "text":
+                        content.append(TextContent(type="text", text=item["text"]))
+                    elif item.get("type") == "image":
+                        content.append(
+                            ImageContent(
+                                type="image",
+                                data=item["data"],
+                                mimeType=item["mimeType"],
+                            )
+                        )
+
+            if not content:
+                content = [TextContent(type="text", text="Tool executed successfully")]
+
+            return content
+
         except Exception as e:
-            logger.error(f"Error listing tools: {e}")
-            return JSONResponse({"error": str(e)}, status_code=500)
+            logger.error(f"Error executing tool {name}: {e}")
+            return [
+                TextContent(type="text", text=f"Error executing tool {name}: {str(e)}")
+            ]
 
-    return Starlette(
-        debug=debug,
-        routes=[
-            Route("/sse", endpoint=handle_sse, methods=["GET"]),
-            Route("/health", endpoint=health_check, methods=["GET"]),
-            Route("/tools", endpoint=list_tools, methods=["GET"]),
-            Mount("/messages/", app=sse.handle_post_message),
-        ],
-    )
+    return server
 
 
-def main():
-    """Run the MCP server with improved configuration."""
-    parser = argparse.ArgumentParser(
-        description="MCP Automation Testing Framework Server"
-    )
-    parser.add_argument(
-        "--host", 
-        default=settings.SERVER_HOST, 
-        help=f"Host to bind to (default: {settings.SERVER_HOST})"
-    )
-    parser.add_argument(
-        "--port", 
-        type=int, 
-        default=int(os.environ.get("PORT", str(settings.SERVER_PORT))), 
-        help=f"Port to listen on (default: {settings.SERVER_PORT})"
-    )
-    parser.add_argument(
-        "--debug", 
-        action="store_true",
-        default=settings.SERVER_DEBUG,
-        help="Enable debug mode"
-    )
-    args = parser.parse_args()
+class MCPServer:
 
-    if not 1 <= args.port <= 65535:
-        raise ValueError(f"Invalid port: {args.port}")
+    def __init__(
+        self,
+        settings: Optional[Settings] = None,
+        capabilities: Optional[List[str]] = None,
+    ):
+        self.settings = settings or Settings()
+        self.capabilities = capabilities
+        self.context = ServerContext(self.settings, capabilities=capabilities)
+        self.server = create_server(self.settings, capabilities)
+        
+        def on_initialized():
+            if hasattr(self.server, '_session') and hasattr(self.server._session, 'client_info'):
+                client_info = self.server._session.client_info
+                if client_info:
+                    self.context.clientVersion = {
+                        "name": client_info.name,
+                        "version": client_info.version
+                    }
+        
+        if hasattr(self.server, 'set_initialized_callback'):
+            self.server.set_initialized_callback(on_initialized)
 
-    starlette_app = create_starlette_app(debug=args.debug)
+    def create_initialization_options(self) -> InitializationOptions:
+        from mcp.server.models import ServerCapabilities
 
-    logger.info(f" Starting MCP Automation Testing Framework server on {args.host}:{args.port}")
-    logger.info(f" Transport: Server-Sent Events (SSE)")
-    logger.info(f" SSE Endpoint: http://{args.host}:{args.port}/sse")
-    logger.info(f" Messages Endpoint: http://{args.host}:{args.port}/messages/")
-    logger.info(f" Health Check: http://{args.host}:{args.port}/health")
-    logger.info(f" Tools List: http://{args.host}:{args.port}/tools")
-    logger.info(f"Configuration loaded from settings:")
-    logger.info(f"  - Browser: {settings.BROWSER_TYPE} ({'headless' if settings.BROWSER_HEADLESS else 'headed'})")
-    logger.info(f"  - Viewport: {settings.BROWSER_VIEWPORT_WIDTH}x{settings.BROWSER_VIEWPORT_HEIGHT}")
-    logger.info(f"  - Output directory: {settings.OUTPUT_DIRECTORY}")
-    logger.info(f"  - Debug mode: {args.debug}")
+        return InitializationOptions(
+            server_name="mcp-automation-server",
+            server_version="1.0.0",
+            capabilities=ServerCapabilities(tools={"listChanged": True}, logging={}),
+        )
     
-    uvicorn.run(
-        starlette_app, 
-        host=args.host, 
-        port=args.port,
-        log_level="debug" if args.debug else settings.SERVER_LOG_LEVEL.lower(),
-        access_log=args.debug
-    )
+    def setup_exit_watchdog(self):
+        import signal
+        import sys
+        
+        def handle_exit():
+            logger.info("Server shutting down...")
+            try:
+                import asyncio
+                asyncio.run(self.context.close())
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
+            sys.exit(0)
+        
+        signal.signal(signal.SIGINT, lambda s, f: handle_exit())
+        signal.signal(signal.SIGTERM, lambda s, f: handle_exit())
 
+    async def run_stdio(self):
+        from mcp.server.stdio import stdio_server
 
-if __name__ == "__main__":
-    main()
+        async with stdio_server() as (read_stream, write_stream):
+            await self.server.run(
+                read_stream, write_stream, self.create_initialization_options()
+            )
+
+    async def run_websocket(self, host: str = "localhost", port: int = 8765):
+        from transports import websocket_server
+        from starlette.applications import Starlette
+        from starlette.routing import WebSocketRoute
+        import uvicorn
+
+        async def websocket_endpoint(websocket):
+            await websocket.accept()
+            async with websocket_server(
+                websocket.scope, websocket.receive, websocket.send
+            ) as (read_stream, write_stream):
+                await self.server.run(
+                    read_stream, write_stream, self.create_initialization_options()
+                )
+
+        app = Starlette(routes=[WebSocketRoute("/", websocket_endpoint)])
+
+        config = uvicorn.Config(app, host=host, port=port, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    async def run_sse(self, host: str = "localhost", port: int = 8080):
+        from mcp.server.sse import SseServerTransport
+        from starlette.applications import Starlette
+        from starlette.routing import Route, Mount
+        from starlette.responses import Response
+        import uvicorn
+        import logging
+
+        logging.getLogger("mcp").setLevel(logging.INFO)
+        logging.getLogger("mcp.server").setLevel(logging.INFO)
+        logging.getLogger("mcp.server.session").setLevel(logging.INFO)
+
+        sse_transport = SseServerTransport("/messages")
+
+        async def handle_sse(request):
+            logger.info("New SSE connection established")
+            try:
+                async with sse_transport.connect_sse(
+                    request.scope, request.receive, request._send
+                ) as (read_stream, write_stream):
+                    logger.info("Starting MCP server with initialization options")
+                    await self.server.run(
+                        read_stream, write_stream, self.create_initialization_options()
+                    )
+            except (Exception, asyncio.CancelledError) as e:
+                if isinstance(e, asyncio.CancelledError):
+                    logger.info("SSE connection cancelled by client")
+                else:
+                    logger.error(f"Error in SSE connection: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+                logger.info("SSE connection closed")
+            return Response()
+
+        app = Starlette(
+            routes=[
+                Route("/sse", endpoint=handle_sse, methods=["GET"]),
+                Mount("/messages", app=sse_transport.handle_post_message),
+            ]
+        )
+
+        logger.info(f"Starting SSE server on {host}:{port}")
+        config = uvicorn.Config(app, host=host, port=port, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    async def run_http(self, host: str = "localhost", port: int = 8080):
+        from mcp.server.streamable_http import StreamableHTTPServerTransport
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+        from starlette.responses import JSONResponse
+        import uvicorn
+
+        transport = StreamableHTTPServerTransport(
+            mcp_session_id=None, is_json_response_enabled=True
+        )
+
+        async def run_mcp_server():
+            async with transport.connect() as (read_stream, write_stream):
+                await self.server.run(
+                    read_stream, write_stream, self.create_initialization_options()
+                )
+
+        async def mcp_endpoint(request):
+            await transport.handle_request(
+                request.scope, request.receive, request._send
+            )
+
+        async def health_endpoint(request):
+            return JSONResponse({"status": "ok", "service": "mcp-server"})
+
+        app = Starlette(
+            routes=[
+                Route("/mcp", mcp_endpoint, methods=["GET", "POST", "DELETE"]),
+                Route("/health", health_endpoint, methods=["GET"]),
+            ]
+        )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_mcp_server)
+
+            config = uvicorn.Config(app, host=host, port=port, log_level="info")
+            server = uvicorn.Server(config)
+            await server.serve()

@@ -1,11 +1,101 @@
+# Python bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+
+# Git and version control
 .git/
+.gitignore
+.gitlab-ci.yml
+.github/
+
+# Environment and virtual environments
 .env
+.env.*
 .venv
 env/
 venv/
 ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test files and directories
+tests/
+test/
+pytest.ini
+.pytest_cache/
+.coverage
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Documentation
+*.md
+README*
+CHANGELOG*
+LICENSE*
+CONTRIBUTING*
+docs/
+doc/
+
+# Development files
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Output and logs
+output/
+logs/
+mcp_output/
 *.log
+*.out
+
+# Lock files and package management
+uv.lock
+poetry.lock
+Pipfile.lock
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Security sensitive files
+*.key
+*.pem
+*.crt
+*.p12
+secrets/
+credentials/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+.directory
+
+# Application specific
+traces/
+screenshots/
+downloads/
+
+# Test and development scripts
+test-*.py
+*test.py
+benchmark/
+examples/
