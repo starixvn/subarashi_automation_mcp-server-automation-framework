@@ -28,6 +28,7 @@ from .google_sheets import GOOGLE_SHEETS_TOOLS
 from .google_sheets_advanced import GOOGLE_SHEETS_ADVANCED_TOOLS
 from .google_sheets_export import GOOGLE_SHEETS_EXPORT_TOOLS
 from .database import get_database_tools
+from .page_content import get_page_content_tools
 
 if TYPE_CHECKING:
     from ..context import ServerContext
@@ -64,6 +65,7 @@ def create_snapshot_tools() -> List[Tool]:
     tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
     tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
     tools.extend(get_database_tools(capture_snapshot=True))
+    tools.extend(get_page_content_tools(capture_snapshot=True))
 
     return tools
 
@@ -95,6 +97,7 @@ def create_vision_tools() -> List[Tool]:
     tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
     tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
     tools.extend(get_database_tools(capture_snapshot=False))
+    tools.extend(get_page_content_tools(capture_snapshot=False))
 
     return tools
 
@@ -168,6 +171,8 @@ class EnhancedToolRegistry:
 
         tools.extend(get_database_tools(capture_snapshot=True))
 
+        tools.extend(get_page_content_tools(capture_snapshot=True))
+
         return tools
 
     def _create_vision_tools(self) -> List[Tool]:
@@ -210,6 +215,8 @@ class EnhancedToolRegistry:
         tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
 
         tools.extend(get_database_tools(capture_snapshot=False))
+
+        tools.extend(get_page_content_tools(capture_snapshot=False))
 
         return tools
 
@@ -474,6 +481,9 @@ def get_tools(capabilities: Optional[List[ToolCapability]] = None) -> List[Tool]
 
     if not capabilities or ToolCapability.DATABASE in capabilities:
         all_tools.extend(get_database_tools())
+
+    # Page content tools are always included as they're core functionality
+    all_tools.extend(get_page_content_tools())
 
     all_tools.extend(get_interaction_tools())
     all_tools.extend(get_snapshot_tools())

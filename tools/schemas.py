@@ -368,3 +368,17 @@ class DatabaseCloseInputSchema(ToolInputSchema):
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
     )
+
+
+class GetPageHtmlInputSchema(ToolInputSchema):
+    """Input schema for getting complete page HTML optimized for element mapping"""
+    format_html: bool = Field(default=True, description="Format HTML with line breaks for readability")
+    max_length: int = Field(default=150000, description="Maximum HTML length before truncation", ge=10000, le=500000)
+
+
+class GetPageContentInputSchema(ToolInputSchema):
+    """Input schema for getting page content with options"""
+    include_meta: bool = Field(default=False, description="Include meta tags in the output")
+    include_links: bool = Field(default=False, description="Include links in the output")
+    include_images: bool = Field(default=False, description="Include images in the output")
+    max_length: int = Field(default=50000, description="Maximum length of text content", ge=1000, le=200000)
