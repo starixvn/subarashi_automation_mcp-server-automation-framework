@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "weather": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "D:/models_context_protocol/MCP_Server_SSE/mcp-server-automation-framework",
+        "run",
+        "main.py",
+        "--transport",
+        "stdio"
+      ]
+    }
+  }
+} 

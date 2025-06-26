@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import signal
+import sys
+import uvicorn
 from typing import Any, Dict, List, Optional
 
 import anyio
@@ -12,7 +15,26 @@ from mcp.types import (
     TextContent,
     CallToolResult,
     ImageContent,
+    Prompt,
+    PromptMessage,
+    GetPromptResult,
+    Resource,
+    ReadResourceResult,
 )
+from prompts.handlers import get_prompts_handlers
+from resources.handlers import get_resources_handlers
+from mcp.server.models import ServerCapabilities
+from mcp.server.stdio import stdio_server
+from transports import websocket_server
+from starlette.routing import WebSocketRoute
+from mcp.server.sse import SseServerTransport
+from starlette.applications import Starlette
+from starlette.routing import Route, Mount
+from starlette.responses import Response
+from mcp.server.streamable_http import StreamableHTTPServerTransport
+from starlette.responses import JSONResponse
+
+
 
 from config.settings import Settings
 from context import ServerContext
@@ -21,14 +43,20 @@ logger = logging.getLogger(__name__)
 
 
 def create_server(
-    settings: Optional[Settings] = None, capabilities: Optional[List[str]] = None
+    settings: Optional[Settings] = None, 
+    capabilities: Optional[List[str]] = None,
+    context: Optional[ServerContext] = None
 ) -> Server:
     if settings is None:
         settings = Settings()
 
-    context = ServerContext(settings, capabilities=capabilities)
+    if context is None:
+        context = ServerContext(settings, capabilities=capabilities)
 
     server = Server("mcp-automation-server")
+    
+    prompts_handlers = get_prompts_handlers()
+    resources_handlers = get_resources_handlers(context)
 
     @server.list_tools()
     async def list_tools() -> List[Tool]:
@@ -99,8 +127,23 @@ def create_server(
                 TextContent(type="text", text=f"Error executing tool {name}: {str(e)}")
             ]
 
-    return server
+    @server.list_prompts()
+    async def list_prompts() -> List[Prompt]:
+        return await prompts_handlers["list_prompts"]()
+    
+    @server.get_prompt()
+    async def get_prompt(name: str, arguments: Optional[Dict[str, Any]] = None) -> GetPromptResult:
+        return await prompts_handlers["get_prompt"](name, arguments)
+    
+    @server.list_resources()
+    async def list_resources() -> List[Resource]:
+        return await resources_handlers["list_resources"]()
+    
+    @server.read_resource()
+    async def read_resource(uri: str) -> ReadResourceResult:
+        return await resources_handlers["read_resource"](uri)
 
+    return server
 
 class MCPServer:
 
@@ -112,7 +155,7 @@ class MCPServer:
         self.settings = settings or Settings()
         self.capabilities = capabilities
         self.context = ServerContext(self.settings, capabilities=capabilities)
-        self.server = create_server(self.settings, capabilities)
+        self.server = create_server(self.settings, capabilities, self.context)
         
         def on_initialized():
             if hasattr(self.server, '_session') and hasattr(self.server._session, 'client_info'):
@@ -127,22 +170,24 @@ class MCPServer:
             self.server.set_initialized_callback(on_initialized)
 
     def create_initialization_options(self) -> InitializationOptions:
-        from mcp.server.models import ServerCapabilities
+        
 
         return InitializationOptions(
             server_name="mcp-automation-server",
             server_version="1.0.0",
-            capabilities=ServerCapabilities(tools={"listChanged": True}, logging={}),
+            capabilities=ServerCapabilities(
+                tools={"listChanged": True}, 
+                prompts={"listChanged": True},
+                resources={"subscribe": True, "listChanged": True},
+                logging={}
+            ),
         )
     
     def setup_exit_watchdog(self):
-        import signal
-        import sys
         
         def handle_exit():
             logger.info("Server shutting down...")
             try:
-                import asyncio
                 asyncio.run(self.context.close())
             except Exception as e:
                 logger.error(f"Error during shutdown: {e}")
@@ -152,7 +197,6 @@ class MCPServer:
         signal.signal(signal.SIGTERM, lambda s, f: handle_exit())
 
     async def run_stdio(self):
-        from mcp.server.stdio import stdio_server
 
         async with stdio_server() as (read_stream, write_stream):
             await self.server.run(
@@ -160,10 +204,7 @@ class MCPServer:
             )
 
     async def run_websocket(self, host: str = "localhost", port: int = 8765):
-        from transports import websocket_server
-        from starlette.applications import Starlette
-        from starlette.routing import WebSocketRoute
-        import uvicorn
+        
 
         async def websocket_endpoint(websocket):
             await websocket.accept()
@@ -181,12 +222,6 @@ class MCPServer:
         await server.serve()
 
     async def run_sse(self, host: str = "localhost", port: int = 8080):
-        from mcp.server.sse import SseServerTransport
-        from starlette.applications import Starlette
-        from starlette.routing import Route, Mount
-        from starlette.responses import Response
-        import uvicorn
-        import logging
 
         logging.getLogger("mcp").setLevel(logging.INFO)
         logging.getLogger("mcp.server").setLevel(logging.INFO)
@@ -228,11 +263,6 @@ class MCPServer:
         await server.serve()
 
     async def run_http(self, host: str = "localhost", port: int = 8080):
-        from mcp.server.streamable_http import StreamableHTTPServerTransport
-        from starlette.applications import Starlette
-        from starlette.routing import Route
-        from starlette.responses import JSONResponse
-        import uvicorn
 
         transport = StreamableHTTPServerTransport(
             mcp_session_id=None, is_json_response_enabled=True

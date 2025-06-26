@@ -1,7 +1,7 @@
 import asyncio
+import os
 import logging
-from typing import Optional, List, Dict, Any, Callable, TYPE_CHECKING
-from pathlib import Path
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 from config.settings import Settings
 from core.modal_state import (
@@ -18,6 +18,17 @@ from core.browser_context_factory import (
     BrowserContextManager,
 )
 from core.tab import Tab
+from tools.registry import EnhancedToolRegistry
+from tools.tool_schema import ToolCapability
+from prompts.registry import PromptRegistry
+from resources.registry import ResourceRegistry
+from resources.providers import (
+    FileSystemResourceProvider, 
+    BrowserResourceProvider, 
+    DatabaseResourceProvider
+)
+from tools.utils import ManualPromise
+
 
 if TYPE_CHECKING:
     from playwright.async_api import Dialog, FileChooser, Download, Page
@@ -53,9 +64,6 @@ class ServerContext:
         self.clientVersion: Optional[Dict[str, str]] = None
         self._pending_action: Optional[Dict[str, Any]] = None
 
-        from tools.registry import EnhancedToolRegistry
-        from tools.tool_schema import ToolCapability
-
         tool_capabilities = None
         if capabilities:
             tool_capabilities = []
@@ -68,6 +76,36 @@ class ServerContext:
         self.tool_registry: EnhancedToolRegistry = EnhancedToolRegistry(
             self, tool_capabilities
         )
+        
+        
+        self.prompt_registry = PromptRegistry()
+        
+        
+        
+        self.resource_registry = ResourceRegistry()
+        self._setup_resource_providers()
+
+    def _setup_resource_providers(self):
+        
+        
+        
+        fs_provider = FileSystemResourceProvider(
+            root_paths=[os.getcwd()],
+            allowed_extensions=[
+                '.txt', '.md', '.json', '.yaml', '.yml', '.xml', '.csv',
+                '.log', '.py', '.js', '.ts', '.html', '.css', '.sql',
+                '.toml', '.ini', '.cfg', '.conf', '.docx', '.pdf'
+            ]
+        )
+        self.resource_registry.register_provider("file", fs_provider)
+        
+        browser_provider = BrowserResourceProvider(self)
+        self.resource_registry.register_provider("browser", browser_provider)
+        
+        db_provider = DatabaseResourceProvider()
+        self.resource_registry.register_provider("db", db_provider)
+        
+        logger.info("Resource providers initialized")
 
     async def start(self):
         await self._ensure_browser_context()
@@ -283,7 +321,6 @@ class ServerContext:
         return any(state.modal_state.type.value == 'dialog' for state in self._modal_states)
 
     async def _race_against_modal_dialogs(self, action):    
-        from tools.utils import ManualPromise
         
         self._pending_action = {
             "dialog_shown": ManualPromise()
@@ -336,6 +373,16 @@ class ServerContext:
                 logger.error(f"Error closing tab: {e}")
 
         await self._download_tracker.cleanup()
+
+        try:
+            for scheme, provider in self.resource_registry.get_providers().items():
+                if hasattr(provider, '_file_watchers'):
+                    for watcher in provider._file_watchers.values():
+                        watcher.cancel()
+                    provider._file_watchers.clear()
+                    provider._subscribers.clear()
+        except Exception as e:
+            logger.error(f"Error cleaning up resource providers: {e}")
 
         if self._browser_context_promise:
             try:
