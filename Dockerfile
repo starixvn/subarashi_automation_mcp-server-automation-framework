@@ -36,6 +36,8 @@ COPY server.py .
 COPY config/ ./config/
 COPY core/ ./core/
 COPY tools/ ./tools/
+COPY prompts/ ./prompts/
+COPY resources/ ./resources/
 COPY transports/ ./transports/
 
 COPY docker-config.json ./config/docker-default.json
