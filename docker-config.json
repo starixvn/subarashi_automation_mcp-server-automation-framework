@@ -10,7 +10,7 @@
       "channel": "chrome",
       "executable_path": null,
       "headless": true,
-      "chromium_sandbox": true,
+      "chromium_sandbox": false,
       "proxy": null,
       "traces_dir": null,
       "assistant_mode": true

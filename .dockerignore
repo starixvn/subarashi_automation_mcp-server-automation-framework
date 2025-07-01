@@ -1,19 +1,45 @@
-# Python bytecode
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+docs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Git and version control
-.git/
-.gitignore
-.gitlab-ci.yml
-.github/
-
-# Environment and virtual environments
+# Virtual environments
 .env
-.env.*
 .venv
 env/
 venv/
@@ -21,81 +47,45 @@ ENV/
 env.bak/
 venv.bak/
 
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Test files and directories
-tests/
-test/
-pytest.ini
+# Testing
 .pytest_cache/
 .coverage
+htmlcov/
 .tox/
 .cache
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
+.hypothesis/
 
-# Documentation
-*.md
-README*
-CHANGELOG*
-LICENSE*
-CONTRIBUTING*
-docs/
-doc/
-
-# Development files
-Dockerfile*
-docker-compose*
-.dockerignore
-
-# Output and logs
+# Output directories
+mcp_output/
 output/
 logs/
-mcp_output/
-*.log
-*.out
-
-# Lock files and package management
-uv.lock
-poetry.lock
-Pipfile.lock
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Security sensitive files
-*.key
-*.pem
-*.crt
-*.p12
-secrets/
-credentials/
-
-# Temporary files
-*.tmp
-*.temp
-.tmp/
 temp/
+tmp/
 
-# OS generated files
+# OS
+.DS_Store
 Thumbs.db
-ehthumbs.db
-.directory
 
-# Application specific
-traces/
-screenshots/
-downloads/
+# Docker
+Dockerfile.dev
+docker-compose.yml
+docker-compose.override.yml
 
-# Test and development scripts
-test-*.py
-*test.py
-benchmark/
-examples/
+# Development tools
+.pre-commit-config.yaml
+Makefile
+
+# Jupyter
+.ipynb_checkpoints
+
+# Large files
+*.log
+*.tar.gz
+*.zip
+
+# Node modules (if any)
+node_modules/
+npm-debug.log*

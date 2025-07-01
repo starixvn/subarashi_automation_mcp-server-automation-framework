@@ -1,9 +1,3 @@
-"""
-MCP Resources Handlers
-
-Handlers for MCP resources protocol following low-level MCP server pattern.
-"""
-
 import logging
 from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 from mcp.types import Resource as MCPResource, ReadResourceResult
@@ -17,22 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 def get_resources_handlers(context: Optional["ServerContext"] = None) -> Dict[str, Callable]:
-    """
-    Get the MCP protocol handlers for resources functionality.
-    
-    Args:
-        context: Server context containing resource registry
-    
-    Returns:
-        Dictionary of handler functions for MCP server integration
-    """
-    
+
     async def list_resources() -> List[MCPResource]:
-        """
-        Handle resources/list request.
         
-        Returns list of all available resources in MCP format.
-        """
         try:
             registry = context.resource_registry if context else resource_registry
             resources = await registry.list_resources()
@@ -46,15 +27,7 @@ def get_resources_handlers(context: Optional["ServerContext"] = None) -> Dict[st
             return []
     
     async def read_resource(uri: str) -> ReadResourceResult:
-        """
-        Handle resources/read request.
         
-        Args:
-            uri: URI of the resource to read
-            
-        Returns:
-            ReadResourceResult with resource contents
-        """
         try:
             registry = context.resource_registry if context else resource_registry
             result = await registry.read_resource(uri)
@@ -64,20 +37,12 @@ def get_resources_handlers(context: Optional["ServerContext"] = None) -> Dict[st
             
         except Exception as e:
             logger.error(f"Error reading resource {uri}: {e}")
-            # Return empty result on error
             return ReadResourceResult(contents=[])
     
     async def subscribe_resource(uri: str) -> None:
-        """
-        Handle resources/subscribe request.
         
-        Args:
-            uri: URI of the resource to subscribe to
-        """
         try:
             registry = context.resource_registry if context else resource_registry
-            # Note: The actual notification callback would be provided by the MCP server
-            # For now, we'll just register with the registry
             success = await registry.subscribe_to_resource(uri, lambda x: None)
             
             if success:
@@ -89,12 +54,7 @@ def get_resources_handlers(context: Optional["ServerContext"] = None) -> Dict[st
             logger.error(f"Error subscribing to resource {uri}: {e}")
     
     async def unsubscribe_resource(uri: str) -> None:
-        """
-        Handle resources/unsubscribe request.
         
-        Args:
-            uri: URI of the resource to unsubscribe from
-        """
         try:
             registry = context.resource_registry if context else resource_registry
             success = await registry.unsubscribe_from_resource(uri)

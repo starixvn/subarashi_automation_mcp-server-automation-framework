@@ -11832,7 +11832,7 @@ The Model Context Protocol provides authorization capabilities at the transport 
 enabling MCP clients to make requests to restricted MCP servers on behalf of resource
 owners. This specification defines the authorization flow for HTTP-based transports.
 
-### 1.2 Protocol Requirements
+### 1.2 Protocol Requirementspractise
 
 Authorization is **OPTIONAL** for MCP implementations. When supported:
 

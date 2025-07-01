@@ -1,8 +1,3 @@
-"""
-MCP Prompts Module
-
-Provides prompt templates and management for MCP server.
-"""
 
 from .models import Prompt, PromptArgument, PromptMessage
 from .registry import PromptRegistry, prompt_registry

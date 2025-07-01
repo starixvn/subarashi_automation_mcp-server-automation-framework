@@ -1,8 +1,3 @@
-"""
-MCP Prompts Registry
-
-Registry for managing prompt templates following MCP protocol.
-"""
 
 import logging
 from typing import Dict, List, Optional, Any
@@ -19,14 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 class PromptRegistry:
-    """Registry for managing MCP prompts."""
     
     def __init__(self):
         self._prompts: Dict[str, Prompt] = {}
         self._setup_default_prompts()
     
     def register_prompt(self, prompt: Prompt) -> None:
-        """Register a prompt in the registry."""
+        
         if prompt.name in self._prompts:
             logger.warning(f"Prompt '{prompt.name}' already exists, replacing")
         
@@ -34,15 +28,15 @@ class PromptRegistry:
         logger.debug(f"Registered prompt: {prompt.name}")
     
     def get_prompt(self, name: str) -> Optional[Prompt]:
-        """Get a prompt by name."""
+        
         return self._prompts.get(name)
     
     def list_prompts(self) -> List[Prompt]:
-        """List all registered prompts."""
+        
         return list(self._prompts.values())
     
     def unregister_prompt(self, name: str) -> bool:
-        """Unregister a prompt by name."""
+        
         if name in self._prompts:
             del self._prompts[name]
             logger.debug(f"Unregistered prompt: {name}")
@@ -50,14 +44,12 @@ class PromptRegistry:
         return False
     
     def clear(self) -> None:
-        """Clear all registered prompts."""
+        
         self._prompts.clear()
         logger.debug("Cleared all prompts")
     
     def _setup_default_prompts(self) -> None:
-        """Setup default automation prompts."""
         
-        # Analyze webpage prompt
         async def analyze_webpage_generator(args: Dict[str, Any]) -> List[PromptMessage]:
             url = args.get("url", "")
             focus = args.get("focus", "general analysis")
@@ -89,7 +81,6 @@ class PromptRegistry:
             generator=analyze_webpage_generator
         )
         
-        # Generate test script prompt
         async def generate_test_script_generator(args: Dict[str, Any]) -> List[PromptMessage]:
             feature = args.get("feature", "")
             url = args.get("url", "")
@@ -132,7 +123,6 @@ class PromptRegistry:
             generator=generate_test_script_generator
         )
         
-        # API test plan prompt
         async def api_test_plan_generator(args: Dict[str, Any]) -> List[PromptMessage]:
             api_endpoint = args.get("api_endpoint", "")
             method = args.get("method", "GET")
@@ -178,7 +168,6 @@ class PromptRegistry:
             generator=api_test_plan_generator
         )
         
-        # SQL query optimization prompt
         async def sql_query_optimization_generator(args: Dict[str, Any]) -> List[PromptMessage]:
             query = args.get("query", "")
             database_type = args.get("database_type", "postgresql")
@@ -215,7 +204,6 @@ class PromptRegistry:
             generator=sql_query_optimization_generator
         )
         
-        # Debug automation issue prompt
         async def debug_automation_issue_generator(args: Dict[str, Any]) -> List[PromptMessage]:
             issue_description = args.get("issue_description", "")
             error_message = args.get("error_message", "")
@@ -254,7 +242,6 @@ class PromptRegistry:
             generator=debug_automation_issue_generator
         )
         
-        # Register all default prompts
         for prompt in [analyze_webpage, generate_test_script, api_test_plan, sql_optimization, debug_automation]:
             self.register_prompt(prompt)
         

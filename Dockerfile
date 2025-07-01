@@ -1,15 +1,21 @@
+
 FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements.txt pyproject.toml ./
 
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install playwright==1.52.0 
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt
+
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/playwright-browsers
-RUN playwright install --with-deps
+RUN --mount=type=cache,target=/tmp/playwright \
+    playwright install --with-deps chromium
+RUN playwright install-deps
 
-FROM python:3.11-slim-bookworm AS production
+FROM python:3.11-slim-bookworm AS base
 
 WORKDIR /app
 
@@ -18,7 +24,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libglib2.0-0 libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libdbus-1-3 libxcb1 libxkbcommon0 libx11-6 \
     libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-    libgbm1 libpango-1.0-0 libcairo2 libasound2 gcc unixodbc unixodbc-dev \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2 libxss1 \
+    gcc unixodbc unixodbc-dev \
+    procps \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && rm -rf /var/cache/apt/*
@@ -28,34 +36,49 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app/playwright-browsers /app/playwright-browsers
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/playwright-browsers
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-COPY __init__.py .
-COPY context.py .
-COPY main.py .
-COPY server.py .
+COPY __init__.py ./
+COPY pyproject.toml pytest.ini ./
+
 COPY config/ ./config/
 COPY core/ ./core/
-COPY tools/ ./tools/
 COPY prompts/ ./prompts/
 COPY resources/ ./resources/
+COPY tools/ ./tools/
 COPY transports/ ./transports/
+
+COPY context.py server.py main.py ./
 
 COPY docker-config.json ./config/docker-default.json
 
-RUN mkdir -p /app/output && \
-    chmod 755 /app/output
-
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser && \
-    chown -R appuser:appuser /app
-
-USER appuser
+RUN mkdir -p /app/output /app/mcp_output /app/logs && \
+    chmod 755 /app/output /app/mcp_output /app/logs
 
 ENV MCP_BROWSER_TYPE=chromium
 ENV MCP_HEADLESS=true
 ENV MCP_OUTPUT_DIR=/app/output
 ENV MCP_ISOLATED=true
+ENV MCP_NO_SANDBOX=true
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV TZ="Asia/Ho_Chi_Minh"
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+RUN adduser --disabled-password \
+    --home /app \
+    --gecos '' mcpuser && chown -R mcpuser /app && chown -R mcpuser /tmp
+USER mcpuser
 
 EXPOSE 5000
 
-CMD ["python", "main.py", "--config", "config/docker-default.json", "--transport", "sse", "--host", "0.0.0.0", "--port", "5000", "--headless", "--isolated"]
+CMD ["python", "main.py", \
+     "--config", "config/docker-default.json", \
+     "--transport", "sse", \
+     "--host", "0.0.0.0", \
+     "--port", "5000", \
+     "--headless", \
+     "--isolated", \
+     "--no-sandbox"]

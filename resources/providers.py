@@ -1,8 +1,3 @@
-"""
-MCP Resource Providers
-
-Providers for different types of resources following MCP protocol.
-"""
 
 import asyncio
 import logging
@@ -28,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 class ResourceProvider(ABC):
-    """Abstract base class for resource providers."""
     
     def __init__(self, scheme: str):
         self.scheme = scheme
@@ -37,30 +31,25 @@ class ResourceProvider(ABC):
     
     @abstractmethod
     async def list_resources(self) -> List[Resource]:
-        """List all available resources from this provider."""
         pass
     
     @abstractmethod
     async def read_resource(self, uri: str) -> List[ResourceContent]:
-        """Read content of a specific resource."""
         pass
     
     async def subscribe_to_resource(self, uri: str, callback) -> bool:
-        """Subscribe to resource updates (optional)."""
         if uri not in self._subscribers:
             self._subscribers[uri] = []
         self._subscribers[uri].append(callback)
         return True
     
     async def unsubscribe_from_resource(self, uri: str) -> bool:
-        """Unsubscribe from resource updates (optional)."""
         if uri in self._subscribers:
             del self._subscribers[uri]
         return True
 
 
 class FileSystemResourceProvider(ResourceProvider):
-    """Provider for file system resources."""
     
     def __init__(
         self, 
@@ -81,7 +70,6 @@ class FileSystemResourceProvider(ResourceProvider):
         logger.info(f"FileSystemResourceProvider initialized with {len(self.root_paths)} root paths")
     
     async def list_resources(self) -> List[Resource]:
-        """List all file resources in root paths."""
         resources = []
         
         for root_path in self.root_paths:
@@ -92,7 +80,6 @@ class FileSystemResourceProvider(ResourceProvider):
             try:
                 for file_path in root_path.rglob("*"):
                     if file_path.is_file():
-                        # Check file size
                         try:
                             file_size = file_path.stat().st_size
                             if file_size > self.max_file_size:
@@ -100,11 +87,9 @@ class FileSystemResourceProvider(ResourceProvider):
                         except (OSError, IOError):
                             continue
                         
-                        # Check extension if filtering is enabled
                         if self.allowed_extensions and file_path.suffix.lower() not in self.allowed_extensions:
                             continue
                         
-                        # Create relative path for URI
                         try:
                             relative_path = file_path.relative_to(root_path).as_posix()
                             uri = f"file:///{relative_path}"
@@ -130,20 +115,15 @@ class FileSystemResourceProvider(ResourceProvider):
         return resources
     
     async def read_resource(self, uri: str) -> List[ResourceContent]:
-        """Read content of a file resource."""
         try:
-            # Parse URI to get relative path
             parsed = urlparse(uri)
             if parsed.scheme != "file":
                 raise ValueError(f"Unsupported URI scheme: {parsed.scheme}")
             
-            # Get the path from URI - handle both file:// and file:/// formats
             relative_path = unquote(parsed.path).lstrip('/')
             if not relative_path and parsed.netloc:
-                # Handle file://filename format where netloc contains the filename
                 relative_path = parsed.netloc
             
-            # Find the file in root paths
             file_path = None
             for root_path in self.root_paths:
                 candidate = root_path / relative_path
@@ -154,12 +134,10 @@ class FileSystemResourceProvider(ResourceProvider):
             if not file_path:
                 raise FileNotFoundError(f"File not found: {relative_path}")
             
-            # Check file size
             file_size = file_path.stat().st_size
             if file_size > self.max_file_size:
                 raise ValueError(f"File too large: {file_size} bytes (max: {self.max_file_size})")
             
-            # Try to read as text first
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
@@ -171,7 +149,6 @@ class FileSystemResourceProvider(ResourceProvider):
                 )]
                 
             except UnicodeDecodeError:
-                # Try binary read for non-text files
                 with open(file_path, 'rb') as f:
                     content = f.read()
                 return [BlobResourceContent.from_bytes(
@@ -186,17 +163,14 @@ class FileSystemResourceProvider(ResourceProvider):
 
 
 class BrowserResourceProvider(ResourceProvider):
-    """Provider for browser-related resources."""
     
     def __init__(self, context: "ServerContext"):
         super().__init__("browser")
         self.context = context
     
     async def list_resources(self) -> List[Resource]:
-        """List available browser resources."""
         resources = []
         
-        # Current page content resource
         resources.append(Resource(
             uri="browser://current-page",
             name="Current Page",
@@ -204,7 +178,6 @@ class BrowserResourceProvider(ResourceProvider):
             mime_type="text/html"
         ))
         
-        # Tab resources
         try:
             tabs = self.context.tabs()
             for i, tab in enumerate(tabs):
@@ -226,7 +199,6 @@ class BrowserResourceProvider(ResourceProvider):
         """Read browser resource content."""
         try:
             if uri == "browser://current-page":
-                # Get current page content if browser context exists
                 try:
                     current_tab = self.context.current_tab_or_die()
                     content = await current_tab.page.content()
@@ -243,7 +215,6 @@ class BrowserResourceProvider(ResourceProvider):
                     )]
             
             elif uri.startswith("browser://tab/"):
-                # Extract tab index
                 tab_index = int(uri.split("/")[-1])
                 tabs = self.context.tabs()
                 
@@ -267,17 +238,14 @@ class BrowserResourceProvider(ResourceProvider):
 
 
 class DatabaseResourceProvider(ResourceProvider):
-    """Provider for database resources."""
     
     def __init__(self):
         super().__init__("db")
         self._connections: Dict[str, Any] = {}
     
     async def list_resources(self) -> List[Resource]:
-        """List available database resources."""
         resources = []
         
-        # Add database connection info resources
         for conn_name in self._connections:
             resources.append(Resource(
                 uri=f"db://{conn_name}/info",
@@ -289,7 +257,6 @@ class DatabaseResourceProvider(ResourceProvider):
         return resources
     
     async def read_resource(self, uri: str) -> List[ResourceContent]:
-        """Read database resource content."""
         try:
             parsed = urlparse(uri)
             if parsed.scheme != "db":
@@ -299,7 +266,6 @@ class DatabaseResourceProvider(ResourceProvider):
             if conn_name not in self._connections:
                 raise ValueError(f"Database connection '{conn_name}' not found")
             
-            # Return connection info as JSON
             import json
             info = {
                 "connection_name": conn_name,
@@ -318,12 +284,10 @@ class DatabaseResourceProvider(ResourceProvider):
             raise
     
     def add_connection(self, name: str, connection: Any):
-        """Add a database connection."""
         self._connections[name] = connection
         logger.info(f"Added database connection: {name}")
     
     def remove_connection(self, name: str):
-        """Remove a database connection."""
         if name in self._connections:
             del self._connections[name]
             logger.info(f"Removed database connection: {name}") 

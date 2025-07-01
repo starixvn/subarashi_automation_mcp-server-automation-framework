@@ -230,6 +230,7 @@ class MCPServer:
         sse_transport = SseServerTransport("/messages")
 
         async def handle_sse(request):
+            
             logger.info("New SSE connection established")
             try:
                 async with sse_transport.connect_sse(
@@ -245,20 +246,39 @@ class MCPServer:
                 else:
                     logger.error(f"Error in SSE connection: {e}")
                     import traceback
-
                     traceback.print_exc()
                 logger.info("SSE connection closed")
             return Response()
 
+        async def handle_messages(scope, receive, send):
+            
+            await sse_transport.handle_post_message(scope, receive, send)
+
+        async def health_endpoint(request):
+            return JSONResponse({
+                "status": "ok",
+                "service": "mcp-automation-server", 
+                "version": "1.0.0",
+                "transport": "sse"
+            })
+
         app = Starlette(
             routes=[
                 Route("/sse", endpoint=handle_sse, methods=["GET"]),
-                Mount("/messages", app=sse_transport.handle_post_message),
+                Route("/health", endpoint=health_endpoint, methods=["GET"]),
             ]
         )
+        
+        original_app = app
+        
+        async def app_with_messages(scope, receive, send):
+            if scope["type"] == "http" and scope["path"] == "/messages" and scope["method"] == "POST":
+                await handle_messages(scope, receive, send)
+            else:
+                await original_app(scope, receive, send)
 
         logger.info(f"Starting SSE server on {host}:{port}")
-        config = uvicorn.Config(app, host=host, port=port, log_level="info")
+        config = uvicorn.Config(app_with_messages, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
         await server.serve()
 
@@ -280,7 +300,12 @@ class MCPServer:
             )
 
         async def health_endpoint(request):
-            return JSONResponse({"status": "ok", "service": "mcp-server"})
+            return JSONResponse({
+                "status": "ok", 
+                "service": "mcp-automation-server",
+                "version": "1.0.0",
+                "transport": "http"
+            })
 
         app = Starlette(
             routes=[
