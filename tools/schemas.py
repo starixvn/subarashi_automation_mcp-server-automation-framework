@@ -309,21 +309,18 @@ class ApiTestInputSchema(ToolInputSchema):
 
 class DatabaseConnectInputSchema(ToolInputSchema):
 
-    db_type: str = Field(description="Database type: postgresql or sqlserver")
-    host: str = Field(description="Database host")
-    port: Optional[int] = Field(default=None, description="Database port")
+    host: str = Field(description="SQL Server host")
+    port: Optional[int] = Field(default=None, description="SQL Server port (default: 1433)")
     database: str = Field(description="Database name")
-    username: str = Field(description="Username")
-    password: str = Field(description="Password")
+    username: Optional[str] = Field(default=None, description="Username (optional, uses default if not provided)")
+    password: Optional[str] = Field(default=None, description="Password (optional, uses default if not provided)")
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
     )
-
-    @validator("db_type")
-    def validate_db_type(cls, v):
-        if v.lower() not in ["postgresql", "sqlserver"]:
-            raise ValueError("Database type must be postgresql or sqlserver")
-        return v.lower()
+    packet_size: Optional[int] = Field(default=None, description="SQL Server packet size")
+    trust_server_certificate: Optional[bool] = Field(default=None, description="Trust server certificate")
+    integrated_security: Optional[bool] = Field(default=None, description="Use integrated security")
+    connection_timeout: Optional[int] = Field(default=None, description="Connection timeout in seconds")
 
 
 class DatabaseQueryInputSchema(ToolInputSchema):

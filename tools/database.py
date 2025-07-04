@@ -1,7 +1,6 @@
 import asyncio
 import json
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
-import asyncpg
 import aioodbc
 
 from .tool_schema import (
@@ -31,8 +30,8 @@ _connections: Dict[str, Any] = {}
 @define_tool_factory(
     capability=ToolCapability.DATABASE,
     name="db_connect",
-    title="Connect to Database",
-    description="Connect to PostgreSQL or SQL Server database",
+    title="Connect to SQL Server",
+    description="Connect to SQL Server database (uses default credentials if not provided)",
     input_schema=DatabaseConnectInputSchema,
     tool_type=ToolType.DESTRUCTIVE,
 )
@@ -41,67 +40,59 @@ def db_connect_factory(capture_snapshot: bool) -> Tool:
         validated_params = DatabaseConnectInputSchema(**params)
 
         code = [
-            f"// Connecting to {validated_params.db_type} database",
-            f"const connection = await connect('{validated_params.host}:{validated_params.port or (5432 if validated_params.db_type == 'postgresql' else 1433)}');",
+            f"// Connecting to SQL Server database",
+            f"const connection = await connect('{validated_params.host}:{validated_params.port or 1433}');",
+            f"// Using {'provided' if validated_params.username else 'default'} credentials",
         ]
 
         async def action() -> ToolActionResult:
             try:
-                db_type = validated_params.db_type
                 host = validated_params.host
                 database = validated_params.database
-                username = validated_params.username
-                password = validated_params.password
+                username = validated_params.username or "vnTestAutomation"
+                password = validated_params.password or "@TestAutomation#"
                 connection_name = validated_params.connection_name or "default"
-                port = validated_params.port
+                port = validated_params.port or 1433
 
-                if db_type == "postgresql":
-                    default_port = 5432
-                    port = port or default_port
+                connection_string_parts = [
+                    "DRIVER={ODBC Driver 17 for SQL Server}",
+                    f"SERVER={host},{port}",
+                    f"DATABASE={database}",
+                    f"UID={username}",
+                    f"PWD={password}"
+                ]
+                
+                if validated_params.packet_size:
+                    connection_string_parts.append(f"PACKET SIZE={validated_params.packet_size}")
+                
+                if validated_params.trust_server_certificate is not None:
+                    trust_value = "yes" if validated_params.trust_server_certificate else "no"
+                    connection_string_parts.append(f"TrustServerCertificate={trust_value}")
+                
+                if validated_params.integrated_security is not None:
+                    security_value = "SSPI" if validated_params.integrated_security else "false"
+                    connection_string_parts.append(f"Integrated Security={security_value}")
+                
+                if validated_params.connection_timeout:
+                    connection_string_parts.append(f"Connection Timeout={validated_params.connection_timeout}")
 
-                    connection = await asyncpg.connect(
-                        host=host,
-                        port=port,
-                        database=database,
-                        user=username,
-                        password=password,
-                    )
+                connection_string = ";".join(connection_string_parts)
 
-                    _connections[connection_name] = {
-                        "type": "postgresql",
-                        "connection": connection,
-                    }
+                connection = await aioodbc.connect(dsn=connection_string)
 
-                    return ToolActionResult(
-                        content=[
-                            {
-                                "type": "text",
-                                "text": f"Successfully connected to PostgreSQL database '{database}' on {host}:{port} as connection '{connection_name}'",
-                            }
-                        ]
-                    )
+                _connections[connection_name] = {
+                    "type": "sqlserver",
+                    "connection": connection,
+                }
 
-                elif db_type == "sqlserver":
-                    default_port = 1433
-                    port = port or default_port
-
-                    connection_string = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={host},{port};DATABASE={database};UID={username};PWD={password}"
-
-                    connection = await aioodbc.connect(dsn=connection_string)
-
-                    _connections[connection_name] = {
-                        "type": "sqlserver",
-                        "connection": connection,
-                    }
-
-                    return ToolActionResult(
-                        content=[
-                            {
-                                "type": "text",
-                                "text": f"Successfully connected to SQL Server database '{database}' on {host}:{port} as connection '{connection_name}'",
-                            }
-                        ]
-                    )
+                return ToolActionResult(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": f"Successfully connected to SQL Server database '{database}' on {host}:{port} as connection '{connection_name}'",
+                        }
+                    ]
+                )
 
             except Exception as e:
                 return ToolActionResult(
@@ -122,8 +113,8 @@ def db_connect_factory(capture_snapshot: bool) -> Tool:
 
     schema = ToolSchema(
         name="db_connect",
-        title="Connect to Database",
-        description="Connect to PostgreSQL or SQL Server database",
+        title="Connect to SQL Server",
+        description="Connect to SQL Server database (uses default credentials if not provided)",
         input_schema=DatabaseConnectInputSchema,
         tool_type=ToolType.DESTRUCTIVE,
     )
@@ -172,41 +163,20 @@ def db_query_factory(capture_snapshot: bool) -> Tool:
 
                 conn_info = _connections[connection_name]
                 connection = conn_info["connection"]
-                db_type = conn_info["type"]
 
-                if db_type == "postgresql":
+                async with connection.cursor() as cursor:
                     if query_params:
-                        rows = await connection.fetch(query, *query_params)
+                        await cursor.execute(query, query_params)
                     else:
-                        rows = await connection.fetch(query)
+                        await cursor.execute(query)
 
-                    if not rows:
-                        return ToolActionResult(
-                            content=[
-                                {
-                                    "type": "text",
-                                    "text": "Query executed successfully. No rows returned.",
-                                }
-                            ]
-                        )
-
-                    columns = list(rows[0].keys()) if rows else []
-                    data = [list(row.values()) for row in rows]
-
-                elif db_type == "sqlserver":
-                    async with connection.cursor() as cursor:
-                        if query_params:
-                            await cursor.execute(query, query_params)
-                        else:
-                            await cursor.execute(query)
-
-                        rows = await cursor.fetchall()
-                        columns = (
-                            [desc[0] for desc in cursor.description]
-                            if cursor.description
-                            else []
-                        )
-                        data = [list(row) for row in rows] if rows else []
+                    rows = await cursor.fetchall()
+                    columns = (
+                        [desc[0] for desc in cursor.description]
+                        if cursor.description
+                        else []
+                    )
+                    data = [list(row) for row in rows] if rows else []
 
                 result_text = (
                     f"Query executed successfully. {len(data)} rows returned.\n\n"
@@ -290,41 +260,24 @@ def db_execute_factory(capture_snapshot: bool) -> Tool:
 
                 conn_info = _connections[connection_name]
                 connection = conn_info["connection"]
-                db_type = conn_info["type"]
 
-                if db_type == "postgresql":
+                async with connection.cursor() as cursor:
                     if statement_params:
-                        result = await connection.execute(statement, *statement_params)
+                        await cursor.execute(statement, statement_params)
                     else:
-                        result = await connection.execute(statement)
+                        await cursor.execute(statement)
+
+                    rows_affected = cursor.rowcount
+                    await connection.commit()
 
                     return ToolActionResult(
                         content=[
                             {
                                 "type": "text",
-                                "text": f"Statement executed successfully. Result: {result}",
+                                "text": f"Statement executed successfully. Rows affected: {rows_affected}",
                             }
                         ]
                     )
-
-                elif db_type == "sqlserver":
-                    async with connection.cursor() as cursor:
-                        if statement_params:
-                            await cursor.execute(statement, statement_params)
-                        else:
-                            await cursor.execute(statement)
-
-                        rows_affected = cursor.rowcount
-                        await connection.commit()
-
-                        return ToolActionResult(
-                            content=[
-                                {
-                                    "type": "text",
-                                    "text": f"Statement executed successfully. Rows affected: {rows_affected}",
-                                }
-                            ]
-                        )
 
             except Exception as e:
                 return ToolActionResult(
@@ -395,47 +348,26 @@ def db_list_tables_factory(capture_snapshot: bool) -> Tool:
 
                 conn_info = _connections[connection_name]
                 connection = conn_info["connection"]
-                db_type = conn_info["type"]
-
-                if db_type == "postgresql":
+                async with connection.cursor() as cursor:
                     if schema_name:
                         query = """
-                            SELECT table_schema, table_name, table_type
-                            FROM information_schema.tables
-                            WHERE table_schema = $1
-                            ORDER BY table_name
+                            SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
+                            FROM INFORMATION_SCHEMA.TABLES
+                            WHERE TABLE_SCHEMA = ?
+                            ORDER BY TABLE_NAME
                         """
-                        rows = await connection.fetch(query, schema_name)
+                        await cursor.execute(query, (schema_name,))
                     else:
                         query = """
-                            SELECT table_schema, table_name, table_type
-                            FROM information_schema.tables
-                            WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-                            ORDER BY table_schema, table_name
+                            SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
+                            FROM INFORMATION_SCHEMA.TABLES
+                            ORDER BY TABLE_SCHEMA, TABLE_NAME
                         """
-                        rows = await connection.fetch(query)
+                        await cursor.execute(query)
 
-                elif db_type == "sqlserver":
-                    async with connection.cursor() as cursor:
-                        if schema_name:
-                            query = """
-                                SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
-                                FROM INFORMATION_SCHEMA.TABLES
-                                WHERE TABLE_SCHEMA = ?
-                                ORDER BY TABLE_NAME
-                            """
-                            await cursor.execute(query, (schema_name,))
-                        else:
-                            query = """
-                                SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
-                                FROM INFORMATION_SCHEMA.TABLES
-                                ORDER BY TABLE_SCHEMA, TABLE_NAME
-                            """
-                            await cursor.execute(query)
-
-                        rows = await cursor.fetchall()
-                        columns = [desc[0] for desc in cursor.description]
-                        rows = [dict(zip(columns, row)) for row in rows]
+                    rows = await cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+                    rows = [dict(zip(columns, row)) for row in rows]
 
                 if not rows:
                     return ToolActionResult(
@@ -526,48 +458,28 @@ def db_describe_table_factory(capture_snapshot: bool) -> Tool:
 
                 conn_info = _connections[connection_name]
                 connection = conn_info["connection"]
-                db_type = conn_info["type"]
 
-                if db_type == "postgresql":
+                async with connection.cursor() as cursor:
                     if schema_name:
                         query = """
-                            SELECT column_name, data_type, is_nullable, column_default, character_maximum_length
-                            FROM information_schema.columns
-                            WHERE table_name = $1 AND table_schema = $2
-                            ORDER BY ordinal_position
+                            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, CHARACTER_MAXIMUM_LENGTH
+                            FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?
+                            ORDER BY ORDINAL_POSITION
                         """
-                        rows = await connection.fetch(query, table_name, schema_name)
+                        await cursor.execute(query, (table_name, schema_name))
                     else:
                         query = """
-                            SELECT column_name, data_type, is_nullable, column_default, character_maximum_length
-                            FROM information_schema.columns
-                            WHERE table_name = $1 AND table_schema = 'public'
-                            ORDER BY ordinal_position
+                            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, CHARACTER_MAXIMUM_LENGTH
+                            FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = ?
+                            ORDER BY ORDINAL_POSITION
                         """
-                        rows = await connection.fetch(query, table_name)
+                        await cursor.execute(query, (table_name,))
 
-                elif db_type == "sqlserver":
-                    async with connection.cursor() as cursor:
-                        if schema_name:
-                            query = """
-                                SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, CHARACTER_MAXIMUM_LENGTH
-                                FROM INFORMATION_SCHEMA.COLUMNS
-                                WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?
-                                ORDER BY ORDINAL_POSITION
-                            """
-                            await cursor.execute(query, (table_name, schema_name))
-                        else:
-                            query = """
-                                SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, CHARACTER_MAXIMUM_LENGTH
-                                FROM INFORMATION_SCHEMA.COLUMNS
-                                WHERE TABLE_NAME = ?
-                                ORDER BY ORDINAL_POSITION
-                            """
-                            await cursor.execute(query, (table_name,))
-
-                        rows = await cursor.fetchall()
-                        columns = [desc[0] for desc in cursor.description]
-                        rows = [dict(zip(columns, row)) for row in rows]
+                    rows = await cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+                    rows = [dict(zip(columns, row)) for row in rows]
 
                 if not rows:
                     return ToolActionResult(
@@ -671,12 +583,8 @@ def db_close_factory(capture_snapshot: bool) -> Tool:
 
                 conn_info = _connections[connection_name]
                 connection = conn_info["connection"]
-                db_type = conn_info["type"]
 
-                if db_type == "postgresql":
-                    await connection.close()
-                elif db_type == "sqlserver":
-                    await connection.close()
+                await connection.close()
 
                 del _connections[connection_name]
 

@@ -248,5 +248,4 @@ class PromptRegistry:
         logger.info(f"Initialized prompt registry with {len(self._prompts)} default prompts")
 
 
-# Global prompt registry instance
 prompt_registry = PromptRegistry() 

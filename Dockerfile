@@ -1,4 +1,3 @@
-
 FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /app
@@ -25,8 +24,15 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libcups2 libdrm2 libdbus-1-3 libxcb1 libxkbcommon0 libx11-6 \
     libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
     libgbm1 libpango-1.0-0 libcairo2 libasound2 libxss1 \
-    gcc unixodbc unixodbc-dev \
-    procps \
+    gcc procps \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && rm -rf /var/cache/apt/*
+
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
+    && curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql17 unixodbc unixodbc-dev \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && rm -rf /var/cache/apt/*
@@ -78,7 +84,7 @@ CMD ["python", "main.py", \
      "--config", "config/docker-default.json", \
      "--transport", "sse", \
      "--host", "0.0.0.0", \
-     "--port", "5000", \
      "--headless", \
      "--isolated", \
-     "--no-sandbox"]
+     "--no-sandbox", \
+     "--port", "5000"]
