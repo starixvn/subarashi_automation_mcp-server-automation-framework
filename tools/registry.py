@@ -24,6 +24,9 @@ from .wait import get_wait_tools
 from .pdf import get_pdf_tools
 from .testing import get_testing_tools
 from .api import get_api_tools
+from .vision import get_vision_screen_tools, get_screenshot_tools       
+from .snapshot import get_snapshot_tools
+from .utils import wait_for_completion
 from .google_sheets import GOOGLE_SHEETS_TOOLS
 from .google_sheets_advanced import GOOGLE_SHEETS_ADVANCED_TOOLS
 from .google_sheets_export import GOOGLE_SHEETS_EXPORT_TOOLS
@@ -40,18 +43,10 @@ def create_snapshot_tools() -> List[Tool]:
     tools = []
     tools.extend(get_core_tools(capture_snapshot=True))
     tools.extend(get_interaction_tools(capture_snapshot=True))
-
-    from .snapshot import get_snapshot_tools
-
     tools.extend(get_snapshot_tools(capture_snapshot=True))
-
     tools.extend(get_dialog_tools(capture_snapshot=True))
     tools.extend(get_tab_tools(capture_snapshot=True))
-
-    from .vision import get_screenshot_tools
-
     tools.extend(get_screenshot_tools(capture_snapshot=True))
-
     tools.extend(get_console_tools(capture_snapshot=True))
     tools.extend(get_keyboard_tools(capture_snapshot=True))
     tools.extend(get_network_tools(capture_snapshot=True))
@@ -60,7 +55,6 @@ def create_snapshot_tools() -> List[Tool]:
     tools.extend(get_pdf_tools(capture_snapshot=True))
     tools.extend(get_testing_tools(capture_snapshot=True))
     tools.extend(get_api_tools(capture_snapshot=False))
-
     tools.extend(GOOGLE_SHEETS_TOOLS)
     tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
     tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
@@ -74,16 +68,10 @@ def create_vision_tools() -> List[Tool]:
     tools = []
     tools.extend(get_core_tools(capture_snapshot=False))
     tools.extend(get_interaction_tools(capture_snapshot=False))
-    from .snapshot import get_snapshot_tools
-
     tools.extend(get_snapshot_tools(capture_snapshot=False))
-
     tools.extend(get_dialog_tools(capture_snapshot=False))
     tools.extend(get_tab_tools(capture_snapshot=False))
-    from .vision import get_vision_screen_tools
-
     tools.extend(get_vision_screen_tools(capture_snapshot=False))
-
     tools.extend(get_console_tools(capture_snapshot=False))
     tools.extend(get_keyboard_tools(capture_snapshot=False))
     tools.extend(get_network_tools(capture_snapshot=False))
@@ -92,7 +80,6 @@ def create_vision_tools() -> List[Tool]:
     tools.extend(get_pdf_tools(capture_snapshot=False))
     tools.extend(get_testing_tools(capture_snapshot=False))
     tools.extend(get_api_tools(capture_snapshot=False))
-
     tools.extend(GOOGLE_SHEETS_TOOLS)
     tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
     tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
@@ -134,43 +121,23 @@ class EnhancedToolRegistry:
         tools = []
 
         tools.extend(get_core_tools(capture_snapshot=True))
-
         tools.extend(get_interaction_tools(capture_snapshot=True))
-
-        from .snapshot import get_snapshot_tools
-
         tools.extend(get_snapshot_tools(capture_snapshot=True))
-
         tools.extend(get_dialog_tools(capture_snapshot=True))
-
         tools.extend(get_tab_tools(capture_snapshot=True))
-
-        from .vision import get_screenshot_tools
-
         tools.extend(get_screenshot_tools(capture_snapshot=True))
-
         tools.extend(get_console_tools(capture_snapshot=True))
-
         tools.extend(get_keyboard_tools(capture_snapshot=True))
-
         tools.extend(get_network_tools(capture_snapshot=True))
-
         tools.extend(get_file_tools(capture_snapshot=True))
-
         tools.extend(get_wait_tools(capture_snapshot=True))
-
         tools.extend(get_pdf_tools(capture_snapshot=True))
-
         tools.extend(get_testing_tools(capture_snapshot=True))
-
         tools.extend(get_api_tools(capture_snapshot=False))
-
         tools.extend(GOOGLE_SHEETS_TOOLS)
         tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
         tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
-
         tools.extend(get_database_tools(capture_snapshot=True))
-
         tools.extend(get_page_content_tools(capture_snapshot=True))
 
         return tools
@@ -179,43 +146,23 @@ class EnhancedToolRegistry:
         tools = []
 
         tools.extend(get_core_tools(capture_snapshot=False))
-
         tools.extend(get_interaction_tools(capture_snapshot=False))
-
-        from .snapshot import get_snapshot_tools
-
         tools.extend(get_snapshot_tools(capture_snapshot=False))
-
         tools.extend(get_dialog_tools(capture_snapshot=False))
-
         tools.extend(get_tab_tools(capture_snapshot=False))
-
-        from .vision import get_vision_screen_tools
-
         tools.extend(get_vision_screen_tools(capture_snapshot=False))
-
         tools.extend(get_console_tools(capture_snapshot=False))
-
         tools.extend(get_keyboard_tools(capture_snapshot=False))
-
         tools.extend(get_network_tools(capture_snapshot=False))
-
         tools.extend(get_file_tools(capture_snapshot=False))
-
         tools.extend(get_wait_tools(capture_snapshot=False))
-
         tools.extend(get_pdf_tools(capture_snapshot=False))
-
         tools.extend(get_testing_tools(capture_snapshot=False))
-
         tools.extend(get_api_tools(capture_snapshot=False))
-
         tools.extend(GOOGLE_SHEETS_TOOLS)
         tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
         tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
-
         tools.extend(get_database_tools(capture_snapshot=False))
-
         tools.extend(get_page_content_tools(capture_snapshot=False))
 
         return tools
@@ -336,7 +283,6 @@ class EnhancedToolRegistry:
                 )
 
             if tool_result.wait_for_network:
-                from .utils import wait_for_completion
 
                 action_result = await wait_for_completion(
                     self.context, tab, racing_action
@@ -419,25 +365,6 @@ class EnhancedToolRegistry:
 
 
 def get_tools(capabilities: Optional[List[ToolCapability]] = None) -> List[Tool]:
-    """Get tools filtered by capabilities."""
-    from .core import get_core_tools
-    from .interaction import get_interaction_tools
-    from .snapshot import get_snapshot_tools
-    from .vision import get_vision_tools
-    from .tabs import get_tab_tools
-    from .dialogs import get_dialog_tools
-    from .console import get_console_tools
-    from .keyboard import get_keyboard_tools
-    from .network import get_network_tools
-    from .files import get_file_tools
-    from .wait import get_wait_tools
-    from .pdf import get_pdf_tools
-    from .testing import get_testing_tools
-    from .api import get_api_tools
-    from .google_sheets import GOOGLE_SHEETS_TOOLS
-    from .google_sheets_advanced import GOOGLE_SHEETS_ADVANCED_TOOLS
-    from .google_sheets_export import GOOGLE_SHEETS_EXPORT_TOOLS
-    from .database import get_database_tools
 
     all_tools = []
 
@@ -482,7 +409,6 @@ def get_tools(capabilities: Optional[List[ToolCapability]] = None) -> List[Tool]
     if not capabilities or ToolCapability.DATABASE in capabilities:
         all_tools.extend(get_database_tools())
 
-    # Page content tools are always included as they're core functionality
     all_tools.extend(get_page_content_tools())
 
     all_tools.extend(get_interaction_tools())

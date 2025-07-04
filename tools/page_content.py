@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any, TYPE_CHECKING
 from .tool_schema import (
     define_tool_factory,
@@ -10,10 +11,13 @@ from .tool_schema import (
 )
 from .schemas import GetPageHtmlInputSchema, GetPageContentInputSchema
 
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
 if TYPE_CHECKING:
     from ..context import ServerContext
-    from ..core.browser_context_factory import BrowserContextFactory
-
 
 @define_tool_factory(
     capability=ToolCapability.CORE,
@@ -26,12 +30,12 @@ if TYPE_CHECKING:
 def browser_get_page_html_factory(capture_snapshot: bool) -> Tool:
     def _format_html(html_content: str) -> str:
         try:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html_content, 'html.parser')
-            return soup.prettify()
-        except ImportError:
-            html_content = html_content.replace('><', '>\n<')
-            return html_content
+            if BeautifulSoup:
+                soup = BeautifulSoup(html_content, 'html.parser')
+                return soup.prettify()
+            else:
+                html_content = html_content.replace('><', '>\n<')
+                return html_content
         except:
             return html_content
 
@@ -244,14 +248,12 @@ def browser_get_page_content_factory(capture_snapshot: bool) -> Tool:
 
 def _format_html_simple(html: str) -> str:
     try:
-        import re
         html = re.sub(r'><', '>\n<', html)
         return html
     except:
         return html
 
 
-# Export tools
 def get_page_content_tools(capture_snapshot: bool = False) -> list[Tool]:
     return [
         browser_get_page_html_factory(capture_snapshot),

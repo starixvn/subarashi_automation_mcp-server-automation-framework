@@ -1,6 +1,9 @@
 import io
 import csv
+import json
+import os
 import pandas as pd
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from googleapiclient.errors import HttpError
@@ -238,8 +241,6 @@ async def sheets_export_range(context, params: Dict[str, Any]) -> ToolResult:
                         writer.writerow(row)
             
             elif export_format == 'json':
-                import json
-                
                 if len(values) > 1:
                     headers = values[0]
                     data = []
@@ -383,10 +384,6 @@ async def sheets_create_from_csv(context, params: Dict[str, Any]) -> ToolResult:
 async def sheets_backup_spreadsheet(context, params: Dict[str, Any]) -> ToolResult:
     async def action() -> ToolActionResult:
         try:
-            import os
-            import json
-            from datetime import datetime
-            
             sheets_service = get_google_sheets_service()
             drive_service = get_google_drive_service()
             

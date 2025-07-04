@@ -3,6 +3,7 @@ import json
 import logging
 from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 if TYPE_CHECKING:
@@ -87,8 +88,6 @@ class PageSnapshot:
                 await self._capture_screenshot()
 
             await self._capture_page_text()
-
-            from datetime import datetime
 
             self._timestamp = datetime.now().isoformat()
 

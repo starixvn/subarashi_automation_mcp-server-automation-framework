@@ -17,7 +17,6 @@ from tools.tool_schema import ToolActionResult
 
 
 # Disable autouse fixture for this test class
-@pytest.mark.usefixtures()
 class TestGoogleSheetsExport:
     
     @pytest.fixture

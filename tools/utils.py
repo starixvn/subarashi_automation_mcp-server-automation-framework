@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from typing import Set, Callable, Optional, TypeVar, TYPE_CHECKING
 from playwright.async_api import Request, Frame
 
@@ -108,7 +109,6 @@ async def wait_for_completion(context: "ServerContext", tab: "Tab", callback: Ca
 
 
 def sanitize_for_file_path(s: str) -> str:
-    import re
     
     def sanitize_part(part: str) -> str:
         return re.sub(r'[\x00-\x2C\x2E-\x2F\x3A-\x40\x5B-\x60\x7B-\x7F]+', '-', part)

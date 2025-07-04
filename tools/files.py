@@ -44,7 +44,7 @@ def browser_upload_file_factory(capture_snapshot: bool) -> Tool:
 
         async def action() -> ToolActionResult:
             try:
-                from core.modal_state import FileChooserModalState
+                
                 fc_state = file_chooser_state
                 if isinstance(fc_state, FileChooserModalState):
                     await fc_state.file_chooser.set_files(validated_params.file_paths)

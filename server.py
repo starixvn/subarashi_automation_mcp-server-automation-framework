@@ -2,6 +2,7 @@ import asyncio
 import logging
 import signal
 import sys
+import traceback
 import uvicorn
 from typing import Any, Dict, List, Optional
 
@@ -244,7 +245,6 @@ class MCPServer:
                     logger.info("SSE connection cancelled by client")
                 else:
                     logger.error(f"Error in SSE connection: {e}")
-                    import traceback
                     traceback.print_exc()
                 logger.info("SSE connection closed")
             return Response()
