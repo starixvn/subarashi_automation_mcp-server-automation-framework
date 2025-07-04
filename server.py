@@ -261,8 +261,24 @@ class MCPServer:
                 "transport": "sse"
             })
 
+        async def root_endpoint(request):
+            return JSONResponse({
+                "service": "MCP Automation Server",
+                "version": "1.0.0",
+                "transport": "sse",
+                "status": "running",
+                "endpoints": {
+                    "health": "/health",
+                    "sse": "/sse",
+                    "messages": "/messages"
+                },
+                "capabilities": self.context.capabilities if hasattr(self.context, 'capabilities') else [],
+                "description": "Model Context Protocol Server for Browser Automation"
+            })
+
         app = Starlette(
             routes=[
+                Route("/", endpoint=root_endpoint, methods=["GET"]),
                 Route("/sse", endpoint=handle_sse, methods=["GET"]),
                 Route("/health", endpoint=health_endpoint, methods=["GET"]),
             ]
@@ -306,8 +322,23 @@ class MCPServer:
                 "transport": "http"
             })
 
+        async def root_endpoint(request):
+            return JSONResponse({
+                "service": "MCP Automation Server",
+                "version": "1.0.0",
+                "transport": "http",
+                "status": "running",
+                "endpoints": {
+                    "health": "/health",
+                    "mcp": "/mcp"
+                },
+                "capabilities": self.context.capabilities if hasattr(self.context, 'capabilities') else [],
+                "description": "Model Context Protocol Server for Browser Automation"
+            })
+
         app = Starlette(
             routes=[
+                Route("/", endpoint=root_endpoint, methods=["GET"]),
                 Route("/mcp", mcp_endpoint, methods=["GET", "POST", "DELETE"]),
                 Route("/health", health_endpoint, methods=["GET"]),
             ]

@@ -63,6 +63,7 @@ class ServerContext:
 
         self.clientVersion: Optional[Dict[str, str]] = None
         self._pending_action: Optional[Dict[str, Any]] = None
+        self.capabilities = capabilities or []
 
         tool_capabilities = None
         if capabilities:

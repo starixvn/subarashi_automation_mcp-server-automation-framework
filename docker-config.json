@@ -45,6 +45,7 @@
     "testing",
     "wait",
     "pdf",
+    "history",
     "api",
     "google_sheets",
     "database"
