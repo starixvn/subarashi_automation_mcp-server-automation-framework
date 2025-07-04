@@ -30,9 +30,8 @@ from starlette.routing import WebSocketRoute
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 from mcp.server.streamable_http import StreamableHTTPServerTransport
-from starlette.responses import JSONResponse
 
 
 
