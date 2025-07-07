@@ -12,6 +12,5 @@ wheels/
 output/
 logs/
 .pytest_cache/
-.vscode/
 *.log
 mcp_output/

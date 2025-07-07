@@ -1,4 +1,3 @@
-from core.browser import BrowserManager, BrowserContext
 from core.tab import Tab
 from core.snapshot import PageSnapshot
 from core.modal_state import (
@@ -16,8 +15,6 @@ from core.browser_context_factory import (
 )
 
 __all__ = [
-    "BrowserManager",
-    "BrowserContext",
     "Tab",
     "PageSnapshot",
     "ModalState",

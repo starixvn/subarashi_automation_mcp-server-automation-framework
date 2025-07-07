@@ -32,7 +32,7 @@ dependencies = [
     "sse-starlette>=2.3.4",
     "starlette>=0.46.2",
     "streamlit>=1.45.1",
-    "typing-extensions>=4.13.2",
+
     "uvicorn>=0.34.2",
     "websockets>=15.0.1",
 ]
