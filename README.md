@@ -1,59 +1,82 @@
-# MCP Server Automation Framework
+# MCP Browser Automation Server
 
-A powerful **Model Context Protocol (MCP) Server** implementation for browser automation and testing using Python and Playwright. This framework provides full compatibility and supports advanced features including vision-based interactions, accessibility snapshots, multi-transport support, and comprehensive browser automation capabilities.
+A comprehensive **Model Context Protocol (MCP) Server** that provides advanced browser automation capabilities through a rich set of 80+ tools, sophisticated architecture, and multiple transport layers.
+
+This MCP server transforms browser automation into a powerful, AI-accessible service with enterprise-grade features including:
+
+- **80+ Specialized Tools** across 15 different capability categories
+- **Multi-Transport Support** (WebSocket, HTTP/SSE, stdio)
+- **Advanced Browser Management** with context isolation and persistent sessions  
+- **Vision Mode** for AI-powered visual automation
+- **Comprehensive Testing Suite** with 20 test files and 100% pass rate
+- **Resource & Prompt Management** with dynamic providers
+- **Google Sheets Integration** with 29 advanced tools for spreadsheet automation
+- **Database Operations** with multi-provider support (PostgreSQL, SQL Server, etc.)
+- **API Testing Framework** with validation and monitoring
+- **Real-time Resource Subscription** with file watching and browser state monitoring
 
 ## 🏗️ Architecture Overview
 
-### Project Structure
+### Core Components
 
 ```
-MCP_Server_Automation_Framework/
-├── config/                 # Configuration management system
-│   ├── __init__.py        # Configuration exports
-│   ├── cli.py             # CLI argument parsing
-│   └── settings.py        # Settings definitions
-├── core/                  # Core browser automation components
-│   ├── __init__.py        # Core exports
-│   ├── browser.py         # Browser management
-│   ├── browser_context_factory.py  # Context factory patterns
-│   ├── download_tracker.py # Download state tracking
-│   ├── modal_state.py     # Modal dialog management
-│   ├── snapshot.py        # Page snapshot capabilities
-│   └── tab.py             # Tab lifecycle management
-├── tools/                 # Tool registry and implementations
-│   ├── __init__.py        # Tool exports
-│   ├── console.py         # Console message tools
-│   ├── core.py            # Core navigation tools
-│   ├── dialogs.py         # Dialog interaction tools
-│   ├── files.py           # File upload/download tools
-│   ├── interaction.py     # Element interaction tools
-│   ├── keyboard.py        # Keyboard input tools
-│   ├── network.py         # Network interception tools
-│   ├── pdf.py             # PDF generation tools
-│   ├── registry.py        # Tool registry system
-│   ├── schemas.py         # Input schema definitions
-│   ├── tabs.py            # Tab management tools
-│   ├── testing.py         # Testing utilities
-│   ├── tool_schema.py     # Tool schema framework
-│   ├── utils.py           # Utility functions
-│   ├── vision.py          # Vision and screenshot tools
-│   └── wait.py            # Wait condition tools
-├── transports/            # Multiple transport protocols
-│   ├── __init__.py        # Transport exports
-│   ├── streamable_http.py # HTTP transport
-│   └── websocket.py       # WebSocket transport
-├── tests/                 # Comprehensive test suite
-│   ├── conftest.py        # Test configuration
-│   ├── fixtures.py        # Test fixtures
-│   ├── test_*.py          # Individual test modules
-│   └── README.md          # Testing documentation
-├── context.py             # Server context and state management
-├── server.py              # Main MCP server implementation
-├── main.py                # CLI entry point
-├── __init__.py            # Package initialization
-├── pyproject.toml         # Project configuration
-├── requirements.txt       # Dependencies
-└── README.md              # This documentation
+mcp-server-automation-framework/
+├── 🔧 tools/           # 80+ automation tools across 15 categories
+│   ├── core.py         # Core browser navigation (5 tools)
+│   ├── interaction.py  # Element interactions (6 tools)
+│   ├── vision.py       # Screenshots & visual automation (4 tools)
+│   ├── tabs.py         # Tab management (3 tools)
+│   ├── dialogs.py      # Dialog handling (1 tool)
+│   ├── console.py      # Console operations (2 tools)
+│   ├── keyboard.py     # Keyboard input (1 tool)
+│   ├── network.py      # Network operations (2 tools)
+│   ├── files.py        # File operations (1 tool)
+│   ├── wait.py         # Wait conditions (2 tools)
+│   ├── pdf.py          # PDF generation (1 tool)
+│   ├── testing.py      # Testing utilities (1 tool)
+│   ├── api.py          # HTTP API testing (7 tools)
+│   ├── google_sheets.py        # Basic Sheets operations (9 tools)
+│   ├── google_sheets_advanced.py # Advanced Sheets (15 tools)
+│   ├── google_sheets_export.py   # Sheets export (5 tools)
+│   ├── database.py     # Database operations (6 tools)
+│   ├── page_content.py # Content extraction (2 tools)
+│   ├── snapshot.py     # Page snapshots (1 tool)
+│   ├── registry.py     # Tool registry system
+│   ├── schemas.py      # Input validation schemas
+│   ├── tool_schema.py  # Tool definition framework
+│   └── utils.py        # Utility functions
+├── 🌐 transports/      # Multiple transport protocols
+│   ├── streamable_http.py # HTTP/SSE transport implementation
+│   └── websocket.py    # WebSocket transport implementation
+├── 📊 resources/       # Dynamic resource providers
+│   ├── providers.py    # File, browser, database providers
+│   ├── registry.py     # Resource registry system
+│   ├── handlers.py     # Resource request handlers
+│   └── models.py       # Resource data models
+├── 💬 prompts/         # Intelligent prompt templates
+│   ├── registry.py     # Prompt registry with 5 default prompts
+│   ├── handlers.py     # Prompt request handlers
+│   └── models.py       # Prompt data models
+├── 🎮 core/            # Browser context management
+│   ├── browser_context_factory.py # Context factory patterns
+│   ├── tab.py          # Tab lifecycle management
+│   ├── modal_state.py  # Modal dialog management
+│   ├── snapshot.py     # Page snapshot capabilities
+│   └── download_tracker.py # Download state tracking
+├── ⚙️ config/          # Configuration system
+│   ├── settings.py     # Settings definitions & validation
+│   ├── cli.py          # CLI argument parsing
+│   └── keys/           # API keys and credentials
+├── 🧪 tests/           # Comprehensive test suite (20 test files)
+│   ├── conftest.py     # Test configuration & fixtures
+│   ├── fixtures.py     # Test fixtures
+│   ├── test_*.py       # Individual test modules
+│   └── README.md       # Testing documentation
+├── 📋 context.py       # Server context and state management
+├── 🖥️ server.py        # MCP server implementation with all transports
+├── 🚀 main.py          # Application entry point with CLI
+├── pyproject.toml      # Project configuration
+└── requirements.txt    # Dependencies
 ```
 
 ### MCP (Model Context Protocol) Integration
@@ -70,35 +93,56 @@ This server implements the **Model Context Protocol** v1.0+, enabling AI models 
 
 ### Prerequisites
 
-- **Python 3.11+** (Required)
-- **Playwright** browsers
-- **uv** (recommended) or pip for package management
-
-### Installation
-
-#### Using uv (Recommended)
+Install `uv` for fast Python dependency management:
 
 ```bash
-# Install uv if not already installed
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Clone and setup
-git clone <repository-url>
-cd MCP_Server_Automation_Framework
-
-# Create virtual environment and install dependencies
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -r requirements.txt
-
-# Install Playwright browsers
-playwright install
+# Install uv
+pip install uv
 ```
 
-#### Using pip
+### Setup Instructions
+
+1. **Clone the Repository**
+   ```bash
+   git clone <repository-url>
+   cd mcp-server-automation-framework
+   ```
+
+2. **Create Virtual Environment**
+   ```bash
+   uv venv
+   ```
+
+3. **Activate Virtual Environment**
+   ```bash
+   # On Windows
+   .venv\Scripts\activate
+   
+   # On macOS/Linux
+   source .venv/bin/activate
+   ```
+
+4. **Install Dependencies**
+   ```bash
+   uv pip install -r requirements.txt
+   ```
+
+5. **Install Playwright Browsers**
+   ```bash
+   playwright install
+   ```
+
+#### Alternative Installation with pip
 
 ```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Install Playwright browsers
 playwright install
 ```
 
@@ -121,37 +165,64 @@ python main.py --vision --caps "core,vision"
 python main.py --transport websocket --port 8765
 ```
 
-#### 3. HTTP Mode
+#### 3. HTTP/SSE Mode (Server-Sent Events)
+```bash
+python main.py --transport sse --port 8080
+```
+
+#### 4. HTTP Mode (Streamable HTTP)
 ```bash
 python main.py --transport http --port 8080
 ```
 
-#### 4. List Available Capabilities
+#### 5. List Available Capabilities
 ```bash
 python main.py --list-capabilities
 ```
+
+### Transport Endpoints
+
+When running in server mode, the following endpoints are available:
+
+#### SSE Transport (Port 8080)
+- `GET /` - Server information and status
+- `GET /sse` - Server-Sent Events connection
+- `POST /messages` - MCP message handling
+- `GET /health` - Health check endpoint
+
+#### HTTP Transport (Port 8080)
+- `GET /` - Server information and status
+- `GET /mcp` - MCP protocol endpoint
+- `POST /mcp` - MCP message handling
+- `DELETE /mcp` - Cleanup operations
+- `GET /health` - Health check endpoint
+
+#### WebSocket Transport (Port 8765)
+- `ws://localhost:8765/` - WebSocket connection for real-time MCP communication
 
 ## 📋 Configuration System
 
 ### Available Tool Capabilities
 
-The framework provides 13 distinct capability categories:
+The framework provides 15 distinct capability categories:
 
 | Capability | Description | Tool Count |
 |------------|-------------|------------|
-| `core` | Basic navigation, resize, close | Always enabled |
-| `vision` | Screenshots, visual interactions | 8 tools |
-| `tabs` | Tab management, creation, switching | 4 tools |
+| `core` | Basic navigation, resize, close | Always enabled (5 tools) |
+| `vision` | Screenshots, visual interactions | 4 tools |
+| `tabs` | Tab management, creation, switching | 3 tools |
 | `console` | Console message handling | 2 tools |
 | `keyboard` | Keyboard input and key pressing | 1 tool |
 | `network` | Request interception, monitoring | 2 tools |
 | `files` | File upload and download | 1 tool |
 | `testing` | Test code generation | 1 tool |
-| `wait` | Wait conditions and timing | 3 tools |
+| `wait` | Wait conditions and timing | 2 tools |
 | `pdf` | PDF generation | 1 tool |
-| `history` | Browser navigation history | 2 tools |
+| `history` | Browser navigation history | Included in core |
 | `install` | Installation utilities | 0 tools |
 | `api` | HTTP API testing and requests | 7 tools |
+| `google_sheets` | Google Sheets automation | 29 tools total |
+| `database` | Database operations | 6 tools |
 
 ### Configuration Hierarchy
 
@@ -215,7 +286,7 @@ The `ServerContext` class manages the complete server state:
 
 ```python
 class ServerContext:
-    """Enhanced server context matching Playwright MCP's Context functionality."""
+    """Enhanced server context with comprehensive state management."""
     
     def __init__(self, settings: Settings, capabilities: Optional[List[str]] = None):
         self.settings = settings
@@ -226,6 +297,8 @@ class ServerContext:
         self._download_tracker = DownloadTracker(settings.output_dir)
         self._pending_action: Optional[Dict[str, Any]] = None
         self.tool_registry = EnhancedToolRegistry(self, capabilities)
+        self.prompt_registry = PromptRegistry()
+        self.resource_registry = ResourceRegistry()
 ```
 
 **Key Features:**
@@ -235,8 +308,89 @@ class ServerContext:
 - Tab lifecycle management
 - Client capability detection
 - Racing modal dialog protection
+- Integrated resource and prompt management
 
-### 2. Tool System (`tools/`)
+### 2. Resources System (`resources/`)
+
+The MCP server provides a comprehensive resource management system:
+
+```python
+class ResourceRegistry:
+    """Registry for managing multiple resource providers."""
+    
+    def register_provider(self, scheme: str, provider: ResourceProvider):
+        """Register a resource provider for a URI scheme."""
+        
+    def get_resource(self, uri: str) -> Resource:
+        """Get a resource by URI."""
+        
+    def subscribe_to_resource(self, uri: str, callback: Callable):
+        """Subscribe to resource changes."""
+```
+
+**Available Resource Providers:**
+
+#### File System Provider (`file://`)
+- **Root paths**: Configurable base directories
+- **Allowed extensions**: `.txt`, `.md`, `.json`, `.yaml`, `.yml`, `.xml`, `.csv`, `.log`, `.py`, `.js`, `.ts`, `.html`, `.css`, `.sql`, `.toml`, `.ini`, `.cfg`, `.conf`, `.docx`, `.pdf`
+- **File watching**: Real-time file change notifications
+- **Security**: Path traversal protection
+
+#### Browser Provider (`browser://`)
+- **Screenshots**: `browser://screenshot/{tab_id}`
+- **Page content**: `browser://content/{tab_id}`
+- **Console logs**: `browser://console/{tab_id}`
+- **Network requests**: `browser://network/{tab_id}`
+- **Downloads**: `browser://downloads/{tab_id}`
+
+#### Database Provider (`db://`)
+- **Schema information**: `db://schema/{connection_id}`
+- **Query results**: `db://query/{query_id}`
+- **Table metadata**: `db://table/{table_name}`
+
+### 3. Prompts System (`prompts/`)
+
+The server includes an intelligent prompt system with 5 built-in prompts:
+
+```python
+class PromptRegistry:
+    """Registry for managing prompt templates."""
+    
+    def register_prompt(self, name: str, prompt: Prompt):
+        """Register a new prompt template."""
+        
+    def get_prompt(self, name: str, arguments: Dict[str, Any]) -> GetPromptResult:
+        """Get a prompt with arguments."""
+```
+
+**Available Prompts:**
+
+#### 1. Browser Automation Prompt (`browser_automation`)
+- **Purpose**: Guides AI in browser automation tasks
+- **Arguments**: `url`, `task_description`, `expected_outcome`
+- **Features**: Step-by-step browser interaction guidance
+
+#### 2. Testing Prompt (`testing_framework`)
+- **Purpose**: Generates comprehensive test scenarios
+- **Arguments**: `test_type`, `target_element`, `validation_criteria`
+- **Features**: Automated test generation and validation
+
+#### 3. API Testing Prompt (`api_testing`)
+- **Purpose**: Structures API testing workflows
+- **Arguments**: `endpoint`, `method`, `expected_status`, `validation_rules`
+- **Features**: Request/response validation and error handling
+
+#### 4. Google Sheets Prompt (`google_sheets`)
+- **Purpose**: Automates spreadsheet operations
+- **Arguments**: `spreadsheet_id`, `operation_type`, `data_range`, `formatting_options`
+- **Features**: Complex spreadsheet automation workflows
+
+#### 5. Database Operations Prompt (`database_operations`)
+- **Purpose**: Guides database interactions
+- **Arguments**: `connection_string`, `query_type`, `tables`, `conditions`
+- **Features**: Safe database operations with validation
+
+### 4. Tool System (`tools/`)
 
 #### Tool Registry (`tools/registry.py`)
 
@@ -244,17 +398,65 @@ Dynamic tool management with vision mode support:
 
 ```python
 class EnhancedToolRegistry:
-    """Enhanced tool registry matching Playwright MCP's tool management."""
+    """Enhanced tool registry with comprehensive tool management."""
     
     def __init__(self, context: "ServerContext", capabilities: Optional[List[ToolCapability]] = None):
         # Create tools based on vision mode
         vision_mode = context.settings.enable_vision
-        self._snapshot_tools = self._create_snapshot_tools()  # 30 tools
-        self._vision_tools = self._create_vision_tools()      # 30 tools
+        self._snapshot_tools = self._create_snapshot_tools()  # 80+ tools
+        self._vision_tools = self._create_vision_tools()      # 80+ tools
         
         # Select appropriate tool set
         all_tools = self._vision_tools if vision_mode else self._snapshot_tools
         self._tools = filter_tools_by_capabilities(all_tools, capabilities)
+    
+    def _create_snapshot_tools(self) -> List[Tool]:
+        """Create snapshot-based tools for accessibility automation."""
+        tools = []
+        tools.extend(get_core_tools(capture_snapshot=True))
+        tools.extend(get_interaction_tools(capture_snapshot=True))
+        tools.extend(get_snapshot_tools(capture_snapshot=True))
+        tools.extend(get_dialog_tools(capture_snapshot=True))
+        tools.extend(get_tab_tools(capture_snapshot=True))
+        tools.extend(get_screenshot_tools(capture_snapshot=True))
+        tools.extend(get_console_tools(capture_snapshot=True))
+        tools.extend(get_keyboard_tools(capture_snapshot=True))
+        tools.extend(get_network_tools(capture_snapshot=True))
+        tools.extend(get_file_tools(capture_snapshot=True))
+        tools.extend(get_wait_tools(capture_snapshot=True))
+        tools.extend(get_pdf_tools(capture_snapshot=True))
+        tools.extend(get_testing_tools(capture_snapshot=True))
+        tools.extend(get_api_tools(capture_snapshot=False))
+        tools.extend(GOOGLE_SHEETS_TOOLS)
+        tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
+        tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
+        tools.extend(get_database_tools(capture_snapshot=True))
+        tools.extend(get_page_content_tools(capture_snapshot=True))
+        return tools
+    
+    def _create_vision_tools(self) -> List[Tool]:
+        """Create vision-based tools for visual automation."""
+        tools = []
+        tools.extend(get_core_tools(capture_snapshot=False))
+        tools.extend(get_interaction_tools(capture_snapshot=False))
+        tools.extend(get_snapshot_tools(capture_snapshot=False))
+        tools.extend(get_dialog_tools(capture_snapshot=False))
+        tools.extend(get_tab_tools(capture_snapshot=False))
+        tools.extend(get_vision_screen_tools(capture_snapshot=False))
+        tools.extend(get_console_tools(capture_snapshot=False))
+        tools.extend(get_keyboard_tools(capture_snapshot=False))
+        tools.extend(get_network_tools(capture_snapshot=False))
+        tools.extend(get_file_tools(capture_snapshot=False))
+        tools.extend(get_wait_tools(capture_snapshot=False))
+        tools.extend(get_pdf_tools(capture_snapshot=False))
+        tools.extend(get_testing_tools(capture_snapshot=False))
+        tools.extend(get_api_tools(capture_snapshot=False))
+        tools.extend(GOOGLE_SHEETS_TOOLS)
+        tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
+        tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
+        tools.extend(get_database_tools(capture_snapshot=False))
+        tools.extend(get_page_content_tools(capture_snapshot=False))
+        return tools
 ```
 
 #### Tool Categories
@@ -291,34 +493,92 @@ class EnhancedToolRegistry:
 - **PDF Generation** (`tools/pdf.py`): Page to PDF conversion
 - **Testing Utilities** (`tools/testing.py`): Test code generation
 
-### 3. Browser Context Factory (`core/browser_context_factory.py`)
+### 5. Browser Context Factory (`core/browser_context_factory.py`)
 
 Multiple browser context creation strategies:
 
 ```python
 class BrowserContextFactory(ABC):
-    """Abstract browser context factory matching Playwright MCP patterns."""
+    """Abstract browser context factory with multiple implementations."""
     
-# Available Implementations:
-# - IsolatedContextFactory: Fresh browser instances
-# - PersistentContextFactory: Persistent user data
-# - CDPContextFactory: Connect to existing browser via CDP
+    @abstractmethod
+    async def create_context(self) -> BrowserContextResult:
+        """Create a new browser context."""
+        
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the browser context and cleanup resources."""
+        
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Factory name for identification."""
 ```
 
-### 4. Snapshot System (`core/snapshot.py`)
+**Available Implementations:**
 
-Advanced page analysis with TypeScript compatibility:
+#### Isolated Context Factory
+- **Purpose**: Creates fresh browser instances for each session
+- **Features**: Complete isolation, no shared state
+- **Use case**: Testing, secure operations
+
+#### Persistent Context Factory
+- **Purpose**: Maintains user data across sessions
+- **Features**: Persistent cookies, local storage, extensions
+- **Use case**: Development, user session simulation
+
+#### CDP Context Factory
+- **Purpose**: Connects to existing browser via Chrome DevTools Protocol
+- **Features**: Debug existing browser, remote control
+- **Use case**: Debugging, external browser control
+
+### 6. Snapshot System (`core/snapshot.py`)
+
+Advanced page analysis with comprehensive state capture:
 
 ```python
 class PageSnapshot:
     """Page snapshot with accessibility tree and element references."""
     
+    def __init__(self, tab: "Tab", settings: Settings):
+        self.tab = tab
+        self.settings = settings
+        self._accessibility_tree: Optional[List[Dict[str, Any]]] = None
+        self._element_references: Optional[List[Dict[str, Any]]] = None
+        self._screenshot_data: Optional[bytes] = None
+        self._timestamp: Optional[datetime] = None
+        
     async def capture(self, include_screenshot: bool = True) -> None:
         """Capture comprehensive page snapshot."""
+        self._timestamp = datetime.now()
         await self._capture_accessibility_tree()
         await self._capture_element_references()
         if include_screenshot:
             await self._capture_screenshot()
+            
+    async def _capture_accessibility_tree(self) -> None:
+        """Capture accessibility tree for element identification."""
+        snapshot = await self.tab.page.accessibility.snapshot()
+        self._accessibility_tree = self._process_accessibility_tree(snapshot)
+        
+    async def _capture_element_references(self) -> None:
+        """Capture element references for interaction."""
+        elements = await self.tab.page.query_selector_all("*")
+        self._element_references = await self._process_elements(elements)
+        
+    def to_markdown(self) -> str:
+        """Convert snapshot to markdown format."""
+        lines = [f"# Page Snapshot - {self.tab.url()}", ""]
+        
+        if self._accessibility_tree:
+            lines.extend(["## Accessibility Tree", ""])
+            lines.extend(self._accessibility_tree_to_markdown())
+            
+        if self._element_references:
+            lines.extend(["## Interactive Elements", ""])
+            lines.extend(self._elements_to_markdown())
+            
+        return "\n".join(lines)
 ```
 
 ### 5. Transport Layer (`transports/`)
@@ -339,7 +599,7 @@ class StreamableHTTPServerTransport:
 
 ### Test Coverage
 
-Comprehensive testing with **19 test files** covering all components:
+Comprehensive testing with **20 test files** covering all components:
 
 ```
 tests/
@@ -359,6 +619,12 @@ tests/
 ├── test_screenshot.py        # Screenshot functionality
 ├── test_server.py            # MCP server functionality
 ├── test_tabs.py              # Tab management
+├── test_api.py               # API testing tools
+├── test_database.py          # Database operations
+├── test_google_sheets.py     # Google Sheets basic operations
+├── test_google_sheets_advanced.py  # Advanced Sheets operations
+├── test_google_sheets_integration.py  # Sheets integration tests
+├── test_google_sheets_export.py     # Sheets export functionality
 ├── conftest.py               # Test configuration
 └── fixtures.py               # Test fixtures
 ```
@@ -670,14 +936,86 @@ CMD ["python", "main.py", "--transport", "http", "--host", "0.0.0.0", "--port", 
 ```bash
 # Production settings
 python main.py \
-  --transport http \
+  --transport sse \
   --host 0.0.0.0 \
   --port 8080 \
   --headless \
   --isolated \
-  --caps "core,vision,interaction" \
+  --caps "core,vision,interaction,google_sheets,database,api" \
   --output-dir /var/log/mcp-server \
   --save-trace
+```
+
+## 🔐 Google Sheets API Setup
+
+To use Google Sheets functionality, you need to set up API credentials:
+
+### 1. Google Cloud Console Setup
+
+1. **Create a Project** in [Google Cloud Console](https://console.cloud.google.com/)
+2. **Enable the Google Sheets API** and Google Drive API
+3. **Create Credentials**:
+   - Go to "Credentials" → "Create Credentials" → "Service Account"
+   - Download the JSON key file
+   - Place it in `config/keys/service-account.json`
+
+### 2. Configure Service Account
+
+```bash
+# Set up service account
+export GOOGLE_APPLICATION_CREDENTIALS="./config/keys/service-account.json"
+
+# Or use in code
+python main.py --caps "google_sheets" --config-file config.json
+```
+
+### 3. Share Spreadsheets
+
+- Share your Google Sheets with the service account email
+- Grant "Editor" permissions for read/write operations
+- Use the spreadsheet ID in your automation
+
+### 4. Environment Variables
+
+```bash
+# Optional: Set additional configuration
+export GOOGLE_SHEETS_DEFAULT_FOLDER="automation-results"
+export GOOGLE_SHEETS_TIMEOUT=30
+export GOOGLE_SHEETS_RETRY_COUNT=3
+```
+
+## 🗄️ Database Configuration
+
+The server supports multiple database types:
+
+### PostgreSQL
+```bash
+# Environment variables
+export DB_TYPE=postgresql
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_NAME=automation_db
+export DB_USER=postgres
+export DB_PASSWORD=password
+```
+
+### SQL Server
+```bash
+# Environment variables
+export DB_TYPE=sqlserver
+export DB_HOST=localhost
+export DB_PORT=1433
+export DB_NAME=automation_db
+export DB_USER=sa
+export DB_PASSWORD=password
+```
+
+### Connection String
+```bash
+# Direct connection string
+export DATABASE_URL="postgresql://user:pass@localhost:5432/db"
+# or
+export DATABASE_URL="mssql://user:pass@localhost:1433/db"
 ```
 
 ## 🤝 Contributing
@@ -714,24 +1052,46 @@ pytest
 ### Core Dependencies
 
 ```
-mcp>=1.0.0                    # Model Context Protocol
-playwright>=1.40.0            # Browser automation
-pydantic>=2.0.0              # Data validation
-anyio>=4.0.0                 # Async primitives
-starlette>=0.27.0            # Web framework
-uvicorn>=0.24.0              # ASGI server
-websockets>=12.0             # WebSocket support
+mcp[cli]>=1.8.0              # Model Context Protocol with CLI support
+playwright>=1.52.0           # Browser automation
+pydantic>=2.11.4             # Data validation
+pydantic-settings>=2.9.1     # Settings management
+anyio>=4.9.0                 # Async primitives
+starlette>=0.46.2            # Web framework
+uvicorn>=0.34.2              # ASGI server
+websockets>=15.0.1           # WebSocket support
+sse-starlette>=2.3.4         # Server-Sent Events support
 ```
 
-### Development Dependencies
+### Google Sheets & Database Integration
 
 ```
-pytest>=7.4.0                # Testing framework
-pytest-asyncio>=0.21.0       # Async test support
-pytest-mock>=3.11.0          # Mocking utilities
-black                        # Code formatting
-ruff                         # Fast linting
-mypy                         # Type checking
+google-api-python-client>=2.172.0  # Google API client
+google-auth-oauthlib>=1.2.2        # OAuth authentication
+google-auth-httplib2>=0.2.0        # HTTP authentication
+openpyxl>=3.1.5                    # Excel file handling
+pandas>=2.3.0                      # Data manipulation
+asyncpg>=0.30.0                    # PostgreSQL async driver
+aioodbc>=0.5.0                     # ODBC async driver
+```
+
+### Development & Testing Dependencies
+
+```
+pytest>=8.4.0                # Testing framework
+pytest-asyncio>=1.0.0        # Async test support
+pytest-mock>=3.14.1          # Mocking utilities
+pytest-html>=4.1.1           # HTML test reports
+python-dotenv>=1.1.0         # Environment variable loading
+```
+
+### Web & API Tools
+
+```
+fastapi>=0.115.12            # FastAPI framework
+httpx>=0.28.1                # HTTP client
+aiohttp>=3.11.10             # Async HTTP client
+streamlit>=1.45.1            # Web UI framework
 ```
 
 ## 📄 License
@@ -749,192 +1109,4 @@ This project is licensed under the MIT License.
 
 **Built with ❤️ using Python 3.11+, Playwright, and the Model Context Protocol**
 
-*This implementation achieves 100% compatibility with the TypeScript playwright-mcp while providing additional Python-specific enhancements and comprehensive testing coverage.*
-
-# MCP Client Framework
-
-## 🎯 Testing với MCP Server Automation Framework
-
-Framework này được thiết kế để kết nối với **MCP Server Automation Framework** (browser automation server) của bạn.
-
-### 📋 Hướng Dẫn Test Đầy Đủ
-
-#### **Bước 1: Khởi động MCP Server của bạn**
-
-```bash
-# Khởi động MCP Server Automation Framework
-python start_mcp_server.py
-```
-
-Server sẽ chạy trên:
-- **HTTP/SSE**: `http://localhost:8000`
-- **WebSocket**: `ws://localhost:8765`
-
-#### **Bước 2: Test tất cả Transport Types**
-
-```bash
-# Test nhanh tất cả transport
-python test_all_transports.py
-
-# Test đầy đủ với báo cáo chi tiết
-python complete_test_guide.py
-```
-
-#### **Bước 3: Test Web Interface**
-
-```bash
-# Khởi động API server (terminal 1)
-python run_server.py
-
-# Khởi động Web UI (terminal 2)  
-streamlit run run_ui.py
-```
-
-Mở browser: `http://localhost:8501`
-
-### 🔧 Cấu Hình Transport Types
-
-#### **SSE (Server-Sent Events) - Recommended**
-```python
-config = MCPConfig.for_sse(
-    server_url="http://localhost:8000/sse",
-    timeout=30.0
-)
-```
-
-#### **WebSocket - Real-time**
-```python
-config = MCPConfig.for_websocket(
-    server_url="ws://localhost:8765",
-    timeout=30.0
-)
-```
-
-#### **StreamableHTTP - Alternative**
-```python
-config = MCPConfig.for_streamablehttp(
-    server_url="http://localhost:8000/mcp",
-    timeout=30.0
-)
-```
-
-### 🎮 Browser Automation Tools
-
-Server cung cấp các tools cho browser automation:
-
-- **Core**: `browser_navigate`, `browser_close`, `browser_resize`
-- **Interaction**: `browser_click`, `browser_type`, `browser_hover`
-- **Vision**: `browser_screenshot`, `browser_capture_snapshot`
-- **Tabs**: Tab management tools
-- **Files**: Upload/download tools
-- **Network**: Request interception
-
-### 📊 Test Results
-
-Sau khi chạy test, bạn sẽ thấy:
-
-```
-============================================================
-🚀 TEST SUMMARY REPORT
-============================================================
-
-📊 Overall Results:
-   • Total Transports Tested: 3
-   • Successful Connections: 3
-   • Success Rate: 100.0%
-
-Transport Details
-------------------------------------------------------------
-
-SSE (Server-Sent Events) : ✅ PASS
-   Server: MCP Server Automation Framework
-   Tools: 30 total, 12 browser tools
-   ✅ Browser navigation test passed
-
-WebSocket                : ✅ PASS
-   Server: MCP Server Automation Framework  
-   Tools: 30 total, 12 browser tools
-   ✅ Browser navigation test passed
-
-StreamableHTTP           : ✅ PASS
-   Server: MCP Server Automation Framework
-   Tools: 30 total, 12 browser tools
-```
-
-### 🚀 Production Usage
-
-#### **Direct Client Usage**
-```python
-from mcp_framework.core.config import MCPConfig
-from mcp_framework.core.client_advanced import MCPClientAdvanced
-
-# Connect to your browser automation server
-config = MCPConfig.for_sse("http://localhost:8000/sse")
-client = MCPClientAdvanced(config)
-
-await client.connect()
-
-# Use browser automation tools
-result = await client.call_tool("browser_navigate", {
-    "url": "https://example.com"
-})
-
-result = await client.call_tool("browser_screenshot", {
-    "full_page": True
-})
-
-await client.disconnect()
-```
-
-#### **API Server Integration**
-```bash
-# Start API server
-python run_server.py
-
-# Connect via REST API
-curl -X POST http://localhost:8001/api/v1/connect \
-  -H "Content-Type: application/json" \
-  -d '{
-    "transport": "sse",
-    "server_url": "http://localhost:8000/sse"
-  }'
-```
-
-### 🏗️ Architecture
-
-- **Core**: `MCPClientAdvanced`, `MCPConfig`, Transport Factory
-- **Transports**: SSE, WebSocket, StreamableHTTP support
-- **API**: FastAPI REST interface on port 8001
-- **UI**: Streamlit web interface on port 8501  
-- **AI**: Gemini integration for chat interface
-
-### 📝 Configuration
-
-Environment variables:
-```bash
-export GEMINI_API_KEY=your_api_key
-export MCP_SERVER_URL=http://localhost:8000
-export API_SERVER_PORT=8001
-```
-
-### 🐛 Troubleshooting
-
-**Server not responding:**
-```bash
-# Check if your MCP server is running
-python start_mcp_server.py
-
-# Check ports
-netstat -an | grep :8000
-netstat -an | grep :8765
-```
-
-**Transport failed:**
-- SSE: Check `http://localhost:8000/sse`
-- WebSocket: Check `ws://localhost:8765`
-- Check firewall settings
-
-**Performance:**
-- SSE: Best for most cases
-- WebSocket: Real-time updates
-- StreamableHTTP: Alternative if SSE fails
+*This implementation provides a comprehensive MCP server with 80+ tools, advanced browser automation, Google Sheets integration, database operations, and extensive testing coverage. The server supports multiple transport protocols and provides both accessibility-based and vision-based automation modes.*

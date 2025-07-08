@@ -5,7 +5,6 @@ from .tool_schema import ToolInputSchema
 
 
 class EmptyInputSchema(ToolInputSchema):
-
     pass
 
 
@@ -379,3 +378,5 @@ class GetPageContentInputSchema(ToolInputSchema):
     include_links: bool = Field(default=False, description="Include links in the output")
     include_images: bool = Field(default=False, description="Include images in the output")
     max_length: int = Field(default=50000, description="Maximum length of text content", ge=1000, le=200000)
+
+# Add new schemas here

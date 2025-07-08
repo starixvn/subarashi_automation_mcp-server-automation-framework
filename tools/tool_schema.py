@@ -24,6 +24,7 @@ class ToolCapability(str, Enum):
     API = "api"
     GOOGLE_SHEETS = "google_sheets"
     DATABASE = "database"
+    # Add new capabilities here
 
 
 class ToolType(str, Enum):
