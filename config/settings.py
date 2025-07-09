@@ -18,6 +18,7 @@ class Settings:
         user_data_dir: Optional[str] = None,
         cdp_endpoint: Optional[str] = None,
         isolated: bool = False,
+        storage_state: Optional[str] = None,
     ):
         self.browser_type = browser_type
         self.headless = headless
@@ -33,6 +34,7 @@ class Settings:
         self.user_data_dir = Path(user_data_dir) if user_data_dir else None
         self.cdp_endpoint = cdp_endpoint
         self.isolated = isolated
+        self.storage_state = storage_state
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -44,13 +46,14 @@ class Settings:
             user_data_dir=os.getenv("MCP_USER_DATA_DIR"),
             cdp_endpoint=os.getenv("MCP_CDP_ENDPOINT"),
             isolated=os.getenv("MCP_ISOLATED", "false").lower() == "true",
+            storage_state=os.getenv("MCP_STORAGE_STATE"),
         )
 
     def __str__(self) -> str:
         return (
             f"Settings(browser={self.browser_type}, headless={self.headless}, "
             f"vision={self.enable_vision}, isolated={self.isolated}, "
-            f"output_dir={self.output_dir})"
+            f"storage_state={self.storage_state}, output_dir={self.output_dir})"
         )
 
 
@@ -482,6 +485,7 @@ def config_to_settings(config: FullConfig) -> Settings:
         user_data_dir=config.browser.user_data_dir,
         cdp_endpoint=config.browser.cdp_endpoint,
         isolated=config.browser.isolated,
+        storage_state=config.browser.context_options.storage_state,
     )
 
 
@@ -493,6 +497,9 @@ def settings_to_config(settings: Settings) -> FullConfig:
         cdp_endpoint=settings.cdp_endpoint,
         launch_options=LaunchOptions(
             headless=settings.headless,
+        ),
+        context_options=ContextOptions(
+            storage_state=settings.storage_state,
         ),
     )
 

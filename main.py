@@ -37,6 +37,7 @@ async def main():
         logger.info(f"Headless: {config.browser.launch_options.headless}")
         logger.info(f"Vision: {config.vision}")
         logger.info(f"Output Dir: {config.output_dir}")
+        logger.info(f"Storage State: {config.browser.context_options.storage_state}")
 
         if config.capabilities:
             logger.info(f"Capabilities: {', '.join(config.capabilities)}")

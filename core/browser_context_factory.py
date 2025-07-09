@@ -181,6 +181,11 @@ class IsolatedContextFactory(BaseBrowserContextFactory):
 
     async def _do_create_context(self, browser: Browser) -> BrowserContext:
         context_options = {"viewport": {"width": 1280, "height": 720}}
+        
+        if hasattr(self.settings, 'storage_state') and self.settings.storage_state:
+            logger.info(f"IsolatedContextFactory using storage_state: {self.settings.storage_state}")
+            context_options["storage_state"] = self.settings.storage_state
+        
         return await browser.new_context(**context_options)
 
 
@@ -215,6 +220,11 @@ class PersistentContextFactory(BrowserContextFactory):
         }
 
         context_options = {"viewport": {"width": 1280, "height": 720}}
+        
+        # Note: launch_persistent_context() doesn't support storage_state parameter
+        # Storage state is handled automatically by the persistent user data directory
+        if hasattr(self.settings, 'storage_state') and self.settings.storage_state:
+            logger.info(f"PersistentContextFactory: storage_state ignored (using persistent user data directory)")
 
         options = {**launch_options, **context_options}
 
@@ -301,6 +311,11 @@ class CDPContextFactory(BaseBrowserContextFactory):
     async def _do_create_context(self, browser: Browser) -> BrowserContext:
         if getattr(self.settings, "isolated", False):
             context_options = {"viewport": {"width": 1280, "height": 720}}
+            
+            if hasattr(self.settings, 'storage_state') and self.settings.storage_state:
+                logger.info(f"CDPContextFactory (isolated) using storage_state: {self.settings.storage_state}")
+                context_options["storage_state"] = self.settings.storage_state
+            
             return await browser.new_context(**context_options)
         else:
             contexts = browser.contexts
@@ -308,6 +323,11 @@ class CDPContextFactory(BaseBrowserContextFactory):
                 return contexts[0]
             else:
                 context_options = {"viewport": {"width": 1280, "height": 720}}
+                
+                if hasattr(self.settings, 'storage_state') and self.settings.storage_state:
+                    logger.info(f"CDPContextFactory (new context) using storage_state: {self.settings.storage_state}")
+                    context_options["storage_state"] = self.settings.storage_state
+                
                 return await browser.new_context(**context_options)
 
 
@@ -321,6 +341,10 @@ def create_browser_context_factory(
 
     isolated = kwargs.get("isolated", False) or getattr(settings, "isolated", False)
     if isolated:
+        return IsolatedContextFactory(settings)
+
+    if hasattr(settings, 'storage_state') and settings.storage_state:
+        logger.info("Using IsolatedContextFactory because storage_state is provided")
         return IsolatedContextFactory(settings)
 
     persistent = kwargs.get("persistent", True)

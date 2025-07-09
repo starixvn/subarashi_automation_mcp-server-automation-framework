@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "weather": {
+    "MCP_Automation_Test": {
       "command": "uv",
       "args": [
         "--directory",
@@ -14,7 +14,7 @@
   },
   "servers": {
     "MCP_Automation_Test": {
-      "url": "http://localhost:8000/sse"
+      "url": "http://localhost:8765"
     }
   }
 } 

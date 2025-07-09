@@ -4,7 +4,7 @@ A comprehensive **Model Context Protocol (MCP) Server** that provides advanced b
 
 This MCP server transforms browser automation into a powerful, AI-accessible service with enterprise-grade features including:
 
-- **80+ Specialized Tools** across 15 different capability categories
+- **70+ Specialized Tools** across 15 different capability categories
 - **Multi-Transport Support** (WebSocket, HTTP/SSE, stdio)
 - **Advanced Browser Management** with context isolation and persistent sessions  
 - **Vision Mode** for AI-powered visual automation
@@ -21,7 +21,7 @@ This MCP server transforms browser automation into a powerful, AI-accessible ser
 
 ```
 mcp-server-automation-framework/
-├── 🔧 tools/           # 80+ automation tools across 15 categories
+├── 🔧 tools/           # 70+ automation tools across 15 categories
 │   ├── core.py         # Core browser navigation (5 tools)
 │   ├── interaction.py  # Element interactions (6 tools)
 │   ├── vision.py       # Screenshots & visual automation (4 tools)
@@ -178,6 +178,69 @@ python main.py --transport http --port 8080
 #### 5. List Available Capabilities
 ```bash
 python main.py --list-capabilities
+```
+
+## 🔐 Authentication & Session Management
+
+### Quick Setup for Authenticated Sessions
+
+To use authenticated sessions with your MCP automation:
+
+1. **Generate Storage State**
+   ```bash
+   python config/get_storage_state.py
+   ```
+
+2. **Login to Multiple Websites**
+   - Browser window will open automatically at `https://nexdev.net/`
+   - **Login to nexdev.net** (or any starting site)
+   - **Open new tabs** and navigate to other websites you need:
+     - `github.com` → login
+     - `google.com` → login  
+     - `stackoverflow.com` → login
+     - Any other sites you need authenticated access to
+   - Press `ENTER` in terminal when done with all logins
+
+3. **Use with MCP Server**
+   ```bash
+   # Storage state automatically loaded for STDIO transport
+   python main.py --transport stdio
+   ```
+
+**✅ Important**: The storage state will capture and save authentication sessions for **ALL websites** you login to during step 2. This means you can automate across multiple authenticated sites without re-login.
+
+#### Example Multi-Site Authentication:
+```bash
+# 1. Run the generator
+python config/get_storage_state.py
+
+# 2. In browser window:
+#    - Login to nexdev.net
+#    - Open new tab → github.com → login
+#    - Open new tab → google.com → login
+#    - Open new tab → stackoverflow.com → login
+#    - Press ENTER in terminal
+
+# 3. Now your MCP server can access ALL 4 sites without re-authentication:
+python main.py --transport stdio
+
+# 4. Test with MCP client - all sites will be authenticated:
+#    - session.call_tool("browser_navigate", {"url": "https://nexdev.net/dashboard"})     ✅ Logged in
+#    - session.call_tool("browser_navigate", {"url": "https://github.com/settings"})     ✅ Logged in  
+#    - session.call_tool("browser_navigate", {"url": "https://google.com/account"})      ✅ Logged in
+#    - session.call_tool("browser_navigate", {"url": "https://stackoverflow.com/users"}) ✅ Logged in
+```
+
+### Custom Storage State Path
+```bash
+# Use custom storage state file
+python main.py --transport stdio --storage-state /path/to/custom/session.json
+```
+
+### Security Note
+Add to `.gitignore`:
+```bash
+echo "config/keys/storage_state.json" >> .gitignore
 ```
 
 ### Transport Endpoints
@@ -403,8 +466,8 @@ class EnhancedToolRegistry:
     def __init__(self, context: "ServerContext", capabilities: Optional[List[ToolCapability]] = None):
         # Create tools based on vision mode
         vision_mode = context.settings.enable_vision
-        self._snapshot_tools = self._create_snapshot_tools()  # 80+ tools
-        self._vision_tools = self._create_vision_tools()      # 80+ tools
+        self._snapshot_tools = self._create_snapshot_tools()  # 70+ tools
+        self._vision_tools = self._create_vision_tools()      # 70+ tools
         
         # Select appropriate tool set
         all_tools = self._vision_tools if vision_mode else self._snapshot_tools
@@ -1109,4 +1172,4 @@ This project is licensed under the MIT License.
 
 **Built with ❤️ using Python 3.11+, Playwright, and the Model Context Protocol**
 
-*This implementation provides a comprehensive MCP server with 80+ tools, advanced browser automation, Google Sheets integration, database operations, and extensive testing coverage. The server supports multiple transport protocols and provides both accessibility-based and vision-based automation modes.*
+*This implementation provides a comprehensive MCP server with 70+ tools, advanced browser automation, Google Sheets integration, database operations, and extensive testing coverage. The server supports multiple transport protocols and provides both accessibility-based and vision-based automation modes.*
