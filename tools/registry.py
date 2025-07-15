@@ -27,9 +27,7 @@ from .api import get_api_tools
 from .vision import get_vision_screen_tools, get_screenshot_tools       
 from .snapshot import get_snapshot_tools
 from .utils import wait_for_completion
-from .google_sheets import GOOGLE_SHEETS_TOOLS
-from .google_sheets_advanced import GOOGLE_SHEETS_ADVANCED_TOOLS
-from .google_sheets_export import GOOGLE_SHEETS_EXPORT_TOOLS
+from .google_sheets import get_google_sheets_tools
 from .database import get_database_tools
 from .page_content import get_page_content_tools
 # Import new tools here
@@ -56,10 +54,8 @@ def create_snapshot_tools() -> List[Tool]:
     tools.extend(get_pdf_tools(capture_snapshot=True))
     tools.extend(get_testing_tools(capture_snapshot=True))
     tools.extend(get_api_tools(capture_snapshot=False))
-    tools.extend(GOOGLE_SHEETS_TOOLS)
-    tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
-    tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
-    tools.extend(get_database_tools(capture_snapshot=True))
+    tools.extend(get_google_sheets_tools(capture_snapshot=False))
+    tools.extend(get_database_tools(capture_snapshot=False))
     tools.extend(get_page_content_tools(capture_snapshot=True))
     # Add new tools here
 
@@ -82,9 +78,7 @@ def create_vision_tools() -> List[Tool]:
     tools.extend(get_pdf_tools(capture_snapshot=False))
     tools.extend(get_testing_tools(capture_snapshot=False))
     tools.extend(get_api_tools(capture_snapshot=False))
-    tools.extend(GOOGLE_SHEETS_TOOLS)
-    tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
-    tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
+    tools.extend(get_google_sheets_tools(capture_snapshot=False))
     tools.extend(get_database_tools(capture_snapshot=False))
     tools.extend(get_page_content_tools(capture_snapshot=False))
     # Add new tools here
@@ -136,10 +130,8 @@ class EnhancedToolRegistry:
         tools.extend(get_pdf_tools(capture_snapshot=True))
         tools.extend(get_testing_tools(capture_snapshot=True))
         tools.extend(get_api_tools(capture_snapshot=False))
-        tools.extend(GOOGLE_SHEETS_TOOLS)
-        tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
-        tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
-        tools.extend(get_database_tools(capture_snapshot=True))
+        tools.extend(get_google_sheets_tools(capture_snapshot=False))
+        tools.extend(get_database_tools(capture_snapshot=False))
         tools.extend(get_page_content_tools(capture_snapshot=True))
         # Add new tools here
         return tools
@@ -161,9 +153,7 @@ class EnhancedToolRegistry:
         tools.extend(get_pdf_tools(capture_snapshot=False))
         tools.extend(get_testing_tools(capture_snapshot=False))
         tools.extend(get_api_tools(capture_snapshot=False))
-        tools.extend(GOOGLE_SHEETS_TOOLS)
-        tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
-        tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
+        tools.extend(get_google_sheets_tools(capture_snapshot=False))
         tools.extend(get_database_tools(capture_snapshot=False))
         tools.extend(get_page_content_tools(capture_snapshot=False))
         # Add new tools here
@@ -404,9 +394,7 @@ def get_tools(capabilities: Optional[List[ToolCapability]] = None) -> List[Tool]
         all_tools.extend(get_api_tools())
 
     if not capabilities or ToolCapability.GOOGLE_SHEETS in capabilities:
-        all_tools.extend(GOOGLE_SHEETS_TOOLS)
-        all_tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
-        all_tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
+        all_tools.extend(get_google_sheets_tools(capture_snapshot=False))
 
     if not capabilities or ToolCapability.DATABASE in capabilities:
         all_tools.extend(get_database_tools())

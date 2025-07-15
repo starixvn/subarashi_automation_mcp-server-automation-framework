@@ -10,9 +10,11 @@ from .tool_schema import (
     ToolInputSchema,
     ToolResult,
     ToolActionResult,
-    define_tool,
+    define_tool_factory,
     ToolCapability,
     ToolType,
+    Tool,
+    ToolSchema,
 )
 
 
@@ -197,443 +199,600 @@ def extract_spreadsheet_id(url_or_id: str) -> str:
     return url_or_id
 
 
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_create_spreadsheet",
-    "Create Spreadsheet",
-    "Create a new Google Spreadsheet",
-    CreateSpreadsheetInput,
-    ToolType.DESTRUCTIVE,
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_create_spreadsheet",
+    title="Create Spreadsheet",
+    description="Create a new Google Spreadsheet",
+    input_schema=CreateSpreadsheetInput,
+    tool_type=ToolType.DESTRUCTIVE,
 )
-async def sheets_create_spreadsheet(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            service = get_google_sheets_service()
-            
-            spreadsheet_body = {
-                'properties': {
-                    'title': params['title']
-                }
-            }
-            
-            if params.get('sheet_names'):
-                spreadsheet_body['sheets'] = []
-                for i, sheet_name in enumerate(params['sheet_names']):
-                    spreadsheet_body['sheets'].append({
-                        'properties': {
-                            'title': sheet_name,
-                            'sheetId': i,
-                            'gridProperties': {
-                                'rowCount': 1000,
-                                'columnCount': 26
-                            }
-                        }
-                    })
-            
-            spreadsheet = service.spreadsheets().create(body=spreadsheet_body).execute()
-            
-            spreadsheet_id = spreadsheet.get('spreadsheetId')
-            spreadsheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Created spreadsheet: {params['title']}\nID: {spreadsheet_id}\nURL: {spreadsheet_url}"
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error creating spreadsheet: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Creating spreadsheet: {params['title']}"],
-        action=action,
-        result_override=None
-    )
-
-
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_open_spreadsheet",
-    "Open Spreadsheet",
-    "Open an existing Google Spreadsheet by ID or URL",
-    OpenSpreadsheetInput,
-    ToolType.READ_ONLY,
-)
-async def sheets_open_spreadsheet(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            service = get_google_sheets_service()
-            
-            spreadsheet_id = None
-            if params.get('spreadsheet_id'):
-                spreadsheet_id = params['spreadsheet_id']
-            elif params.get('url'):
-                spreadsheet_id = extract_spreadsheet_id(params['url'])
-            else:
-                return ToolActionResult(content=[{
-                    "type": "text",
-                    "text": "Error: Either spreadsheet_id or url must be provided"
-                }])
-            
-            spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-            
-            title = spreadsheet.get('properties', {}).get('title', 'Unknown')
-            sheets = spreadsheet.get('sheets', [])
-            sheet_names = [sheet.get('properties', {}).get('title', '') for sheet in sheets]
-            
-            result_text = f"Opened spreadsheet: {title}\n"
-            result_text += f"ID: {spreadsheet_id}\n"
-            result_text += f"Sheets: {', '.join(sheet_names)}"
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": result_text
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error opening spreadsheet: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Opening spreadsheet"],
-        action=action,
-        result_override=None
-    )
-
-
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_share_spreadsheet",
-    "Share Spreadsheet",
-    "Share a Google Spreadsheet with an email address",
-    ShareSpreadsheetInput,
-    ToolType.DESTRUCTIVE,
-)
-async def sheets_share_spreadsheet(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            drive_service = get_google_drive_service()
-            
-            permission = {
-                'type': 'user',
-                'role': params['role'],
-                'emailAddress': params['email']
-            }
-            
-            drive_service.permissions().create(
-                fileId=params['spreadsheet_id'],
-                body=permission,
-                sendNotificationEmail=True
-            ).execute()
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Shared spreadsheet with {params['email']} as {params['role']}"
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error sharing spreadsheet: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Sharing spreadsheet with {params['email']}"],
-        action=action,
-        result_override=None
-    )
-
-
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_list_spreadsheets",
-    "List Spreadsheets",
-    "List accessible Google Spreadsheets",
-    ListSpreadsheetsInput,
-    ToolType.READ_ONLY,
-)
-async def sheets_list_spreadsheets(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            drive_service = get_google_drive_service()
-            
-            query = "mimeType='application/vnd.google-apps.spreadsheet'"
-            results = drive_service.files().list(
-                q=query,
-                pageSize=params.get('max_results', 50),
-                fields="files(id, name, createdTime, modifiedTime)"
-            ).execute()
-            
-            files = results.get('files', [])
-            
-            if not files:
-                return ToolActionResult(content=[{
-                    "type": "text",
-                    "text": "No spreadsheets found"
-                }])
-            
-            result_text = "Accessible Spreadsheets:\n"
-            for file in files:
-                result_text += f"- {file['name']} (ID: {file['id']})\n"
-                result_text += f"  Created: {file.get('createdTime', 'Unknown')}\n"
-                result_text += f"  Modified: {file.get('modifiedTime', 'Unknown')}\n\n"
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": result_text
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error listing spreadsheets: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Listing spreadsheets"],
-        action=action,
-        result_override=None
-    )
-
-
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_create_worksheet",
-    "Create Worksheet",
-    "Create a new worksheet in an existing spreadsheet",
-    CreateWorksheetInput,
-    ToolType.DESTRUCTIVE,
-)
-async def sheets_create_worksheet(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            service = get_google_sheets_service()
-            
-            request = {
-                'addSheet': {
+def sheets_create_spreadsheet_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                service = get_google_sheets_service()
+                
+                spreadsheet_body = {
                     'properties': {
-                        'title': params['title'],
-                        'gridProperties': {
-                            'rowCount': params.get('rows', 1000),
-                            'columnCount': params.get('columns', 26)
+                        'title': params['title']
+                    }
+                }
+                
+                if params.get('sheet_names'):
+                    spreadsheet_body['sheets'] = []
+                    for i, sheet_name in enumerate(params['sheet_names']):
+                        spreadsheet_body['sheets'].append({
+                            'properties': {
+                                'title': sheet_name,
+                                'sheetId': i,
+                                'gridProperties': {
+                                    'rowCount': 1000,
+                                    'columnCount': 26
+                                }
+                            }
+                        })
+                
+                spreadsheet = service.spreadsheets().create(body=spreadsheet_body).execute()
+                
+                spreadsheet_id = spreadsheet.get('spreadsheetId')
+                spreadsheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Created spreadsheet: {params['title']}\nID: {spreadsheet_id}\nURL: {spreadsheet_url}"
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error creating spreadsheet: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Creating spreadsheet: {params['title']}"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_create_spreadsheet",
+        title="Create Spreadsheet",
+        description="Create a new Google Spreadsheet",
+        input_schema=CreateSpreadsheetInput,
+        tool_type=ToolType.DESTRUCTIVE,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
+    )
+
+
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_open_spreadsheet",
+    title="Open Spreadsheet",
+    description="Open an existing Google Spreadsheet by ID or URL",
+    input_schema=OpenSpreadsheetInput,
+    tool_type=ToolType.READ_ONLY,
+)
+def sheets_open_spreadsheet_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                service = get_google_sheets_service()
+                
+                spreadsheet_id = None
+                if params.get('spreadsheet_id'):
+                    spreadsheet_id = params['spreadsheet_id']
+                elif params.get('url'):
+                    spreadsheet_id = extract_spreadsheet_id(params['url'])
+                else:
+                    return ToolActionResult(content=[{
+                        "type": "text",
+                        "text": "Error: Either spreadsheet_id or url must be provided"
+                    }])
+                
+                spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+                
+                title = spreadsheet.get('properties', {}).get('title', 'Unknown')
+                sheets = spreadsheet.get('sheets', [])
+                sheet_names = [sheet.get('properties', {}).get('title', '') for sheet in sheets]
+                
+                result_text = f"Opened spreadsheet: {title}\n"
+                result_text += f"ID: {spreadsheet_id}\n"
+                result_text += f"Sheets: {', '.join(sheet_names)}"
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": result_text
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error opening spreadsheet: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Opening spreadsheet"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_open_spreadsheet",
+        title="Open Spreadsheet",
+        description="Open an existing Google Spreadsheet by ID or URL",
+        input_schema=OpenSpreadsheetInput,
+        tool_type=ToolType.READ_ONLY,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
+    )
+
+
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_share_spreadsheet",
+    title="Share Spreadsheet",
+    description="Share a Google Spreadsheet with an email address",
+    input_schema=ShareSpreadsheetInput,
+    tool_type=ToolType.DESTRUCTIVE,
+)
+def sheets_share_spreadsheet_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                drive_service = get_google_drive_service()
+                
+                permission = {
+                    'type': 'user',
+                    'role': params['role'],
+                    'emailAddress': params['email']
+                }
+                
+                drive_service.permissions().create(
+                    fileId=params['spreadsheet_id'],
+                    body=permission,
+                    sendNotificationEmail=True
+                ).execute()
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Shared spreadsheet with {params['email']} as {params['role']}"
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error sharing spreadsheet: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Sharing spreadsheet with {params['email']}"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_share_spreadsheet",
+        title="Share Spreadsheet",
+        description="Share a Google Spreadsheet with an email address",
+        input_schema=ShareSpreadsheetInput,
+        tool_type=ToolType.DESTRUCTIVE,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
+    )
+
+
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_list_spreadsheets",
+    title="List Spreadsheets",
+    description="List accessible Google Spreadsheets",
+    input_schema=ListSpreadsheetsInput,
+    tool_type=ToolType.READ_ONLY,
+)
+def sheets_list_spreadsheets_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                drive_service = get_google_drive_service()
+                
+                query = "mimeType='application/vnd.google-apps.spreadsheet'"
+                results = drive_service.files().list(
+                    q=query,
+                    pageSize=params.get('max_results', 50),
+                    fields="files(id, name, createdTime, modifiedTime)"
+                ).execute()
+                
+                files = results.get('files', [])
+                
+                if not files:
+                    return ToolActionResult(content=[{
+                        "type": "text",
+                        "text": "No spreadsheets found"
+                    }])
+                
+                result_text = "Accessible Spreadsheets:\n"
+                for file in files:
+                    result_text += f"- {file['name']} (ID: {file['id']})\n"
+                    result_text += f"  Created: {file.get('createdTime', 'Unknown')}\n"
+                    result_text += f"  Modified: {file.get('modifiedTime', 'Unknown')}\n\n"
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": result_text
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error listing spreadsheets: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Listing spreadsheets"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_list_spreadsheets",
+        title="List Spreadsheets",
+        description="List accessible Google Spreadsheets",
+        input_schema=ListSpreadsheetsInput,
+        tool_type=ToolType.READ_ONLY,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
+    )
+
+
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_create_worksheet",
+    title="Create Worksheet",
+    description="Create a new worksheet in an existing spreadsheet",
+    input_schema=CreateWorksheetInput,
+    tool_type=ToolType.DESTRUCTIVE,
+)
+def sheets_create_worksheet_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                service = get_google_sheets_service()
+                
+                request = {
+                    'addSheet': {
+                        'properties': {
+                            'title': params['title'],
+                            'gridProperties': {
+                                'rowCount': params.get('rows', 1000),
+                                'columnCount': params.get('columns', 26)
+                            }
                         }
                     }
                 }
-            }
-            
-            body = {'requests': [request]}
-            
-            response = service.spreadsheets().batchUpdate(
-                spreadsheetId=params['spreadsheet_id'],
-                body=body
-            ).execute()
-            
-            sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Created worksheet: {params['title']} (ID: {sheet_id})"
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error creating worksheet: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Creating worksheet: {params['title']}"],
-        action=action,
-        result_override=None
-    )
-
-
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_read_range",
-    "Read Range",
-    "Read data from a specific range in a Google Sheet",
-    ReadRangeInput,
-    ToolType.READ_ONLY,
-)
-async def sheets_read_range(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            service = get_google_sheets_service()
-            
-            result = service.spreadsheets().values().get(
-                spreadsheetId=params['spreadsheet_id'],
-                range=params['range_name'],
-                majorDimension=params.get('major_dimension', 'ROWS')
-            ).execute()
-            
-            values = result.get('values', [])
-            
-            if not values:
+                
+                body = {'requests': [request]}
+                
+                response = service.spreadsheets().batchUpdate(
+                    spreadsheetId=params['spreadsheet_id'],
+                    body=body
+                ).execute()
+                
+                sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
+                
                 return ToolActionResult(content=[{
                     "type": "text",
-                    "text": f"No data found in range: {params['range_name']}"
+                    "text": f"Created worksheet: {params['title']} (ID: {sheet_id})"
                 }])
-            
-            result_text = f"Data from range {params['range_name']}:\n"
-            for i, row in enumerate(values):
-                result_text += f"Row {i+1}: {row}\n"
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": result_text
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error reading range: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Reading range: {params['range_name']}"],
-        action=action,
-        result_override=None
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error creating worksheet: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Creating worksheet: {params['title']}"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_create_worksheet",
+        title="Create Worksheet",
+        description="Create a new worksheet in an existing spreadsheet",
+        input_schema=CreateWorksheetInput,
+        tool_type=ToolType.DESTRUCTIVE,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
     )
 
 
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_write_range",
-    "Write Range",
-    "Write data to a specific range in a Google Sheet",
-    WriteRangeInput,
-    ToolType.DESTRUCTIVE,
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_read_range",
+    title="Read Range",
+    description="Read data from a specific range in a Google Sheet",
+    input_schema=ReadRangeInput,
+    tool_type=ToolType.READ_ONLY,
 )
-async def sheets_write_range(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            service = get_google_sheets_service()
-            
-            body = {
-                'values': params['values'],
-                'majorDimension': params.get('major_dimension', 'ROWS')
-            }
-            
-            result = service.spreadsheets().values().update(
-                spreadsheetId=params['spreadsheet_id'],
-                range=params['range_name'],
-                valueInputOption='RAW',
-                body=body
-            ).execute()
-            
-            updated_cells = result.get('updatedCells', 0)
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Updated {updated_cells} cells in range: {params['range_name']}"
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error writing to range: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Writing to range: {params['range_name']}"],
-        action=action,
-        result_override=None
+def sheets_read_range_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                service = get_google_sheets_service()
+                
+                result = service.spreadsheets().values().get(
+                    spreadsheetId=params['spreadsheet_id'],
+                    range=params['range_name'],
+                    majorDimension=params.get('major_dimension', 'ROWS')
+                ).execute()
+                
+                values = result.get('values', [])
+                
+                if not values:
+                    return ToolActionResult(content=[{
+                        "type": "text",
+                        "text": f"No data found in range: {params['range_name']}"
+                    }])
+                
+                result_text = f"Data from range {params['range_name']}:\n"
+                for i, row in enumerate(values):
+                    result_text += f"Row {i+1}: {row}\n"
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": result_text
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error reading range: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Reading range: {params['range_name']}"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_read_range",
+        title="Read Range",
+        description="Read data from a specific range in a Google Sheet",
+        input_schema=ReadRangeInput,
+        tool_type=ToolType.READ_ONLY,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
     )
 
 
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_append_data",
-    "Append Data",
-    "Append data to the end of a Google Sheet",
-    AppendDataInput,
-    ToolType.DESTRUCTIVE,
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_write_range",
+    title="Write Range",
+    description="Write data to a specific range in a Google Sheet",
+    input_schema=WriteRangeInput,
+    tool_type=ToolType.DESTRUCTIVE,
 )
-async def sheets_append_data(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            service = get_google_sheets_service()
-            
-            body = {
-                'values': params['values']
-            }
-            
-            result = service.spreadsheets().values().append(
-                spreadsheetId=params['spreadsheet_id'],
-                range=params['range_name'],
-                valueInputOption=params.get('value_input_option', 'RAW'),
-                body=body
-            ).execute()
-            
-            updated_cells = result.get('updates', {}).get('updatedCells', 0)
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Appended {updated_cells} cells to: {params['range_name']}"
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error appending data: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Appending data to: {params['range_name']}"],
-        action=action,
-        result_override=None
+def sheets_write_range_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                service = get_google_sheets_service()
+                
+                body = {
+                    'values': params['values'],
+                    'majorDimension': params.get('major_dimension', 'ROWS')
+                }
+                
+                result = service.spreadsheets().values().update(
+                    spreadsheetId=params['spreadsheet_id'],
+                    range=params['range_name'],
+                    valueInputOption='RAW',
+                    body=body
+                ).execute()
+                
+                updated_cells = result.get('updatedCells', 0)
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Updated {updated_cells} cells in range: {params['range_name']}"
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error writing to range: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Writing to range: {params['range_name']}"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_write_range",
+        title="Write Range",
+        description="Write data to a specific range in a Google Sheet",
+        input_schema=WriteRangeInput,
+        tool_type=ToolType.DESTRUCTIVE,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
     )
 
 
-@define_tool(
-    ToolCapability.GOOGLE_SHEETS,
-    "sheets_clear_range",
-    "Clear Range",
-    "Clear data from a specific range in a Google Sheet",
-    ClearRangeInput,
-    ToolType.DESTRUCTIVE,
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_append_data",
+    title="Append Data",
+    description="Append data to the end of a Google Sheet",
+    input_schema=AppendDataInput,
+    tool_type=ToolType.DESTRUCTIVE,
 )
-async def sheets_clear_range(context, params: Dict[str, Any]) -> ToolResult:
-    async def action() -> ToolActionResult:
-        try:
-            service = get_google_sheets_service()
-            
-            result = service.spreadsheets().values().clear(
-                spreadsheetId=params['spreadsheet_id'],
-                range=params['range_name']
-            ).execute()
-            
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Cleared range: {params['range_name']}"
-            }])
-            
-        except HttpError as error:
-            return ToolActionResult(content=[{
-                "type": "text",
-                "text": f"Error clearing range: {error}"
-            }])
-    
-    return ToolResult(
-        code=[f"# Clearing range: {params['range_name']}"],
-        action=action,
-        result_override=None
+def sheets_append_data_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                service = get_google_sheets_service()
+                
+                body = {
+                    'values': params['values']
+                }
+                
+                result = service.spreadsheets().values().append(
+                    spreadsheetId=params['spreadsheet_id'],
+                    range=params['range_name'],
+                    valueInputOption=params.get('value_input_option', 'RAW'),
+                    body=body
+                ).execute()
+                
+                updated_cells = result.get('updates', {}).get('updatedCells', 0)
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Appended {updated_cells} cells to: {params['range_name']}"
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error appending data: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Appending data to: {params['range_name']}"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_append_data",
+        title="Append Data",
+        description="Append data to the end of a Google Sheet",
+        input_schema=AppendDataInput,
+        tool_type=ToolType.DESTRUCTIVE,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
     )
 
 
-GOOGLE_SHEETS_TOOLS = [
-    sheets_create_spreadsheet,
-    sheets_open_spreadsheet,
-    sheets_share_spreadsheet,
-    sheets_list_spreadsheets,
-    sheets_create_worksheet,
-    sheets_read_range,
-    sheets_write_range,
-    sheets_append_data,
-    sheets_clear_range,
-] 
+@define_tool_factory(
+    capability=ToolCapability.GOOGLE_SHEETS,
+    name="sheets_clear_range",
+    title="Clear Range",
+    description="Clear data from a specific range in a Google Sheet",
+    input_schema=ClearRangeInput,
+    tool_type=ToolType.DESTRUCTIVE,
+)
+def sheets_clear_range_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context, params: Dict[str, Any]) -> ToolResult:
+        async def action() -> ToolActionResult:
+            try:
+                service = get_google_sheets_service()
+                
+                result = service.spreadsheets().values().clear(
+                    spreadsheetId=params['spreadsheet_id'],
+                    range=params['range_name']
+                ).execute()
+                
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Cleared range: {params['range_name']}"
+                }])
+                
+            except HttpError as error:
+                return ToolActionResult(content=[{
+                    "type": "text",
+                    "text": f"Error clearing range: {error}"
+                }])
+        
+        return ToolResult(
+            code=[f"# Clearing range: {params['range_name']}"],
+            action=action,
+            capture_snapshot=False,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="sheets_clear_range",
+        title="Clear Range",
+        description="Clear data from a specific range in a Google Sheet",
+        input_schema=ClearRangeInput,
+        tool_type=ToolType.DESTRUCTIVE,
+    )
+
+    return Tool(
+        capability=ToolCapability.GOOGLE_SHEETS,
+        schema=schema,
+        handle=handle,
+        browser_independent=True,
+    )
+
+
+def get_google_sheets_tools(capture_snapshot: bool = False) -> list[Tool]:
+    return [
+        sheets_create_spreadsheet_factory(capture_snapshot),
+        sheets_open_spreadsheet_factory(capture_snapshot),
+        sheets_share_spreadsheet_factory(capture_snapshot),
+        sheets_list_spreadsheets_factory(capture_snapshot),
+        sheets_create_worksheet_factory(capture_snapshot),
+        sheets_read_range_factory(capture_snapshot),
+        sheets_write_range_factory(capture_snapshot),
+        sheets_append_data_factory(capture_snapshot),
+        sheets_clear_range_factory(capture_snapshot),
+    ]
+
+
+GOOGLE_SHEETS_TOOLS = get_google_sheets_tools() 

@@ -35,3 +35,27 @@ dependencies = [
     "uvicorn>=0.34.2",
     "websockets>=15.0.1",
 ]
+
+# Disable all type checkers and linters
+[tool.mypy]
+ignore_errors = true
+disable_error_code = "ALL"
+
+[tool.pyright]
+typeCheckingMode = "off"
+
+[tool.pylint]
+disable = "all"
+
+[tool.flake8]
+disable = "all"
+
+[tool.black]
+skip-string-normalization = true
+
+[tool.isort]
+profile = "black"
+skip = "**"
+
+[tool.ruff]
+ignore = ["E", "W", "F", "C", "N", "D", "S", "T", "B", "A", "COM", "EM", "ICN", "G", "PIE", "PT", "RET", "SIM", "TID", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]

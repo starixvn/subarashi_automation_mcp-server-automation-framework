@@ -12,7 +12,7 @@
       ]
     }
   },
-  "servers": {
+  "#mcpServers": {
     "MCP_Automation_Test": {
       "url": "http://localhost:8765"
     }

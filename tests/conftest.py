@@ -330,7 +330,4 @@ def google_drive_service_mock():
 def mock_all_google_services(google_sheets_service_mock, google_drive_service_mock):
     with patch('tools.google_sheets.get_google_sheets_service', return_value=google_sheets_service_mock):
         with patch('tools.google_sheets.get_google_drive_service', return_value=google_drive_service_mock):
-            with patch('tools.google_sheets_advanced.get_google_sheets_service', return_value=google_sheets_service_mock):
-                with patch('tools.google_sheets_export.get_google_sheets_service', return_value=google_sheets_service_mock):
-                    with patch('tools.google_sheets_export.get_google_drive_service', return_value=google_drive_service_mock):
-                        yield
+            yield

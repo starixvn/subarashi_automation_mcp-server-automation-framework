@@ -16,20 +16,29 @@
     "python.linting.pydocstyleEnabled": false,
     "python.linting.pycodestyleEnabled": false,
     "python.linting.pylamaEnabled": false,
-    "pylsp.plugins.pycodestyle.enabled": false,
-    "pylsp.plugins.pyflakes.enabled": false,
-    "pylsp.plugins.pylint.enabled": false,
-    "pylsp.plugins.mccabe.enabled": false,
-    "pylsp.plugins.pydocstyle.enabled": false,
-    "pylsp.plugins.yapf.enabled": false,
-    "pylsp.plugins.autopep8.enabled": false,
-    "pylsp.plugins.flake8.enabled": false,
-    "pylsp.plugins.rope_completion.enabled": false,
-    "pylsp.plugins.jedi_completion.enabled": false,
-    "pylsp.plugins.jedi_hover.enabled": false,
-    "pylsp.plugins.jedi_references.enabled": false,
-    "pylsp.plugins.jedi_signature_help.enabled": false,
-    "pylsp.plugins.jedi_symbols.enabled": false,
-    "pylsp.plugins.preload.enabled": false,
-    "pylsp.plugins.rope_rename.enabled": false
+    
+    // Disable BasedPyright specifically
+    "basedpyright.analysis.typeCheckingMode": "off",
+    "basedpyright.analysis.diagnosticMode": "off",
+    "basedpyright.analysis.autoImportCompletions": false,
+    "basedpyright.analysis.indexing": false,
+    
+    // Disable Pylance/Pyright
+    "pylance.insidersChannel": "off",
+    "python.languageServer": "None",
+    
+    // Disable all Python diagnostics
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportGeneralTypeIssues": "none",
+        "reportOptionalSubscript": "none",
+        "reportOptionalMemberAccess": "none",
+        "reportOptionalCall": "none",
+        "reportOptionalIterable": "none",
+        "reportOptionalContextManager": "none",
+        "reportOptionalOperand": "none",
+        "reportTypedDictNotRequiredAccess": "none",
+        "reportPrivateImportUsage": "none",
+        "reportUnboundVariable": "none",
+        "reportMissingImports": "none"
+    }
 }

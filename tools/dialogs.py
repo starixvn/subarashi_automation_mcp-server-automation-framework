@@ -77,7 +77,7 @@ def browser_handle_dialog_factory(capture_snapshot: bool) -> Tool:
         capability=ToolCapability.CORE,
         schema=schema,
         handle=handle,
-        clears_modal_state="dialog",  # matches Playwright MCP's clearsModalState
+        clears_modal_state="dialog",
     )
 
 

@@ -67,9 +67,7 @@ from .wait import get_wait_tools
 from .pdf import get_pdf_tools
 from .testing import get_testing_tools
 from .api import get_api_tools
-from .google_sheets import GOOGLE_SHEETS_TOOLS
-from .google_sheets_advanced import GOOGLE_SHEETS_ADVANCED_TOOLS
-from .google_sheets_export import GOOGLE_SHEETS_EXPORT_TOOLS
+from .google_sheets import get_google_sheets_tools
 from .database import get_database_tools
 from .page_content import get_page_content_tools, PAGE_CONTENT_TOOLS
 
@@ -89,9 +87,7 @@ ALL_TOOLS = [
     *get_pdf_tools(),
     *get_testing_tools(),
     *get_api_tools(),
-    *GOOGLE_SHEETS_TOOLS,
-    *GOOGLE_SHEETS_ADVANCED_TOOLS,
-    *GOOGLE_SHEETS_EXPORT_TOOLS,
+    *get_google_sheets_tools(),
     *get_database_tools(),
     *PAGE_CONTENT_TOOLS,
 ]
@@ -135,16 +131,12 @@ def get_all_tools(capabilities=None, capture_snapshot=True):
         all_tools.extend(get_api_tools(capture_snapshot))
 
     if not capabilities or ToolCapability.GOOGLE_SHEETS in capabilities:
-        all_tools.extend(GOOGLE_SHEETS_TOOLS)
-        all_tools.extend(GOOGLE_SHEETS_ADVANCED_TOOLS)
-        all_tools.extend(GOOGLE_SHEETS_EXPORT_TOOLS)
+        all_tools.extend(get_google_sheets_tools())
 
     if not capabilities or ToolCapability.DATABASE in capabilities:
         all_tools.extend(get_database_tools(capture_snapshot))
 
-    # Page content tools are always included as core functionality
     all_tools.extend(get_page_content_tools(capture_snapshot))
-
     all_tools.extend(get_dialog_tools(capture_snapshot))
     all_tools.extend(get_interaction_tools(capture_snapshot))
     all_tools.extend(get_snapshot_tools(capture_snapshot))
@@ -219,9 +211,7 @@ __all__ = [
     "get_api_tools",
     "ALL_TOOLS",
     "get_all_tools",
-    "GOOGLE_SHEETS_TOOLS",
-    "GOOGLE_SHEETS_ADVANCED_TOOLS",
-    "GOOGLE_SHEETS_EXPORT_TOOLS",
+    "get_google_sheets_tools",
     "get_database_tools",
     "get_page_content_tools",
     "PAGE_CONTENT_TOOLS",
