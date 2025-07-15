@@ -12,15 +12,23 @@ class SnapshotService(BaseService):
             tab = self.get_current_tab()
             snapshot = await tab.capture_snapshot(include_screenshot=include_screenshot)
 
+            element_refs = snapshot.get_all_element_references()
+            iframe_elements_count = len(
+                [ref for ref in element_refs.values() if ref.iframe_index is not None]
+            )
+            main_elements_count = len(element_refs) - iframe_elements_count
+
             return self.success_response(
                 data={
                     "url": snapshot.url(),
                     "title": snapshot.title(),
                     "has_screenshot": snapshot.has_screenshot(),
-                    "element_count": len(snapshot.get_all_element_references()),
+                    "element_count": len(element_refs),
+                    "main_elements_count": main_elements_count,
+                    "iframe_elements_count": iframe_elements_count,
                     "snapshot_text": snapshot.text(),
                 },
-                message=f"Snapshot captured for {snapshot.url()}",
+                message=f"Snapshot captured for {snapshot.url()} (Elements: {main_elements_count} main + {iframe_elements_count} iframe)",
             )
 
         except Exception as e:

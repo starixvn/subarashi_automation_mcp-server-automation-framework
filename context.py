@@ -431,3 +431,66 @@ class ServerContext:
 
     def __str__(self) -> str:
         return f"ServerContext(browser={self.settings.browser_type}, tabs={len(self._tabs)})"
+
+    async def get_iframe_contexts(self) -> List[Dict[str, Any]]:
+        """Get all iframe contexts in current page"""
+        try:
+            current_tab = self.current_tab_or_die()
+
+            iframe_info = await current_tab.page.evaluate("""
+                () => {
+                    const iframes = document.querySelectorAll('iframe');
+                    return Array.from(iframes).map((iframe, index) => {
+                        const rect = iframe.getBoundingClientRect();
+                        return {
+                            index: index,
+                            id: iframe.id || null,
+                            name: iframe.name || null,
+                            src: iframe.src || null,
+                            selector: iframe.id ? `#${iframe.id}` : 
+                                     iframe.name ? `[name="${iframe.name}"]` :
+                                     `iframe:nth-of-type(${index + 1})`,
+                            x: Math.round(rect.left),
+                            y: Math.round(rect.top),
+                            width: Math.round(rect.width),
+                            height: Math.round(rect.height),
+                            visible: rect.width > 0 && rect.height > 0
+                        };
+                    });
+                }
+            """)
+
+            return iframe_info
+        except Exception as e:
+            logger.error(f"Error getting iframe contexts: {e}")
+            return []
+
+    async def switch_to_iframe(self, iframe_selector: str):
+        """Switch focus to specific iframe"""
+        try:
+            current_tab = self.current_tab_or_die()
+
+            iframe_locator = current_tab.page.locator(iframe_selector)
+            frame = iframe_locator.content_frame()
+
+            return frame
+        except Exception as e:
+            logger.error(f"Error switching to iframe {iframe_selector}: {e}")
+            return None
+
+    async def get_iframe_url(self, iframe_selector: str) -> Optional[str]:
+        """Get URL of specific iframe"""
+        try:
+            current_tab = self.current_tab_or_die()
+
+            iframe_src = await current_tab.page.evaluate(f"""
+                () => {{
+                    const iframe = document.querySelector('{iframe_selector}');
+                    return iframe ? iframe.src : null;
+                }}
+            """)
+
+            return iframe_src
+        except Exception as e:
+            logger.error(f"Error getting iframe URL: {e}")
+            return None

@@ -50,6 +50,32 @@ class PageContentService(BaseService):
                         elements.forEach(el => el.remove());
                     });
                     
+                    const iframes = tempDiv.querySelectorAll('iframe');
+                    Array.from(iframes).forEach((iframe, index) => {
+                        try {
+                            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                            if (iframeDoc) {
+                                const iframeBody = iframeDoc.body;
+                                if (iframeBody) {
+                                    const comment = document.createComment(
+                                        ` IFRAME #${index} CONTENT: ${iframeBody.innerHTML.substring(0, 500)} `
+                                    );
+                                    iframe.parentNode.insertBefore(comment, iframe.nextSibling);
+                                }
+                            } else {
+                                const comment = document.createComment(
+                                    ` IFRAME #${index} (cross-origin): src="${iframe.src}" `
+                                );
+                                iframe.parentNode.insertBefore(comment, iframe.nextSibling);
+                            }
+                        } catch (e) {
+                            const comment = document.createComment(
+                                ` IFRAME #${index} (access denied): src="${iframe.src}" `
+                            );
+                            iframe.parentNode.insertBefore(comment, iframe.nextSibling);
+                        }
+                    });
+                    
                     const body = tempDiv.querySelector('body');
                     if (body) {
                         return body.outerHTML;
@@ -93,7 +119,39 @@ class PageContentService(BaseService):
             tab = self.get_current_tab()
             page_title = await tab.page.title()
             page_url = tab.page.url
-            page_text = await tab.page.text_content("body") or ""
+
+            main_text = await tab.page.text_content("body") or ""
+
+            iframe_text = ""
+            try:
+                iframe_content = await tab.page.evaluate("""
+                    () => {
+                        const iframes = document.querySelectorAll('iframe');
+                        let allText = '';
+                        
+                        Array.from(iframes).forEach((iframe, index) => {
+                            try {
+                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                if (iframeDoc && iframeDoc.body) {
+                                    const text = iframeDoc.body.innerText || '';
+                                    if (text.trim()) {
+                                        allText += `\\n\\n--- iframe #${index} content ---\\n${text}`;
+                                    }
+                                }
+                            } catch (e) {
+                                allText += `\\n\\n--- iframe #${index} (cross-origin) ---\\n[Cannot access content]`;
+                            }
+                        });
+                        
+                        return allText;
+                    }
+                """)
+                iframe_text = iframe_content
+            except Exception:
+                iframe_text = ""
+
+            page_text = main_text + iframe_text
+
             if len(page_text) > max_length:
                 page_text = page_text[:max_length] + "... (truncated)"
 
@@ -102,6 +160,9 @@ class PageContentService(BaseService):
                 "url": page_url,
                 "text": page_text,
                 "text_length": len(page_text),
+                "main_text_length": len(main_text),
+                "iframe_text_length": len(iframe_text),
+                "has_iframe_content": len(iframe_text) > 0,
             }
 
             if include_meta:
