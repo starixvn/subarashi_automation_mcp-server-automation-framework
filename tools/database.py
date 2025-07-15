@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 import aioodbc
 
-from .tool_schema import (
+from core.tool_schema import (
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -12,7 +12,7 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import (
+from core.schemas import (
     DatabaseConnectInputSchema,
     DatabaseQueryInputSchema,
     DatabaseExecuteInputSchema,
@@ -40,9 +40,9 @@ def db_connect_factory(capture_snapshot: bool) -> Tool:
         validated_params = DatabaseConnectInputSchema(**params)
 
         code = [
-            f"// Connecting to SQL Server database",
-            f"const connection = await connect('{validated_params.host}:{validated_params.port or 1433}');",
-            f"// Using {'provided' if validated_params.username else 'default'} credentials",
+            f"# Connecting to SQL Server database",
+            f"# Host: {validated_params.host}:{validated_params.port or 1433}",
+            f"# Using {'provided' if validated_params.username else 'default'} credentials",
         ]
 
         async def action() -> ToolActionResult:
@@ -59,22 +59,34 @@ def db_connect_factory(capture_snapshot: bool) -> Tool:
                     f"SERVER={host},{port}",
                     f"DATABASE={database}",
                     f"UID={username}",
-                    f"PWD={password}"
+                    f"PWD={password}",
                 ]
-                
+
                 if validated_params.packet_size:
-                    connection_string_parts.append(f"PACKET SIZE={validated_params.packet_size}")
-                
+                    connection_string_parts.append(
+                        f"PACKET SIZE={validated_params.packet_size}"
+                    )
+
                 if validated_params.trust_server_certificate is not None:
-                    trust_value = "yes" if validated_params.trust_server_certificate else "no"
-                    connection_string_parts.append(f"TrustServerCertificate={trust_value}")
-                
+                    trust_value = (
+                        "yes" if validated_params.trust_server_certificate else "no"
+                    )
+                    connection_string_parts.append(
+                        f"TrustServerCertificate={trust_value}"
+                    )
+
                 if validated_params.integrated_security is not None:
-                    security_value = "SSPI" if validated_params.integrated_security else "false"
-                    connection_string_parts.append(f"Integrated Security={security_value}")
-                
+                    security_value = (
+                        "SSPI" if validated_params.integrated_security else "false"
+                    )
+                    connection_string_parts.append(
+                        f"Integrated Security={security_value}"
+                    )
+
                 if validated_params.connection_timeout:
-                    connection_string_parts.append(f"Connection Timeout={validated_params.connection_timeout}")
+                    connection_string_parts.append(
+                        f"Connection Timeout={validated_params.connection_timeout}"
+                    )
 
                 connection_string = ";".join(connection_string_parts)
 
@@ -140,8 +152,8 @@ def db_query_factory(capture_snapshot: bool) -> Tool:
         validated_params = DatabaseQueryInputSchema(**params)
 
         code = [
-            f"// Executing database query",
-            f"const result = await connection.query(`{validated_params.query}`);",
+            f"# Executing database query",
+            f"# Query: {validated_params.query}",
         ]
 
         async def action() -> ToolActionResult:
@@ -158,7 +170,6 @@ def db_query_factory(capture_snapshot: bool) -> Tool:
                                 "text": f"Connection '{connection_name}' not found. Please connect first.",
                             }
                         ],
-                        
                     )
 
                 conn_info = _connections[connection_name]
@@ -198,7 +209,6 @@ def db_query_factory(capture_snapshot: bool) -> Tool:
                     content=[
                         {"type": "text", "text": f"Query execution failed: {str(e)}"}
                     ],
-                    
                 )
 
         return ToolResult(
@@ -237,8 +247,8 @@ def db_execute_factory(capture_snapshot: bool) -> Tool:
         validated_params = DatabaseExecuteInputSchema(**params)
 
         code = [
-            f"// Executing database statement",
-            f"const result = await connection.execute(`{validated_params.query}`);",
+            f"# Executing database statement",
+            f"# Statement: {validated_params.query}",
         ]
 
         async def action() -> ToolActionResult:
@@ -255,7 +265,6 @@ def db_execute_factory(capture_snapshot: bool) -> Tool:
                                 "text": f"Connection '{connection_name}' not found. Please connect first.",
                             }
                         ],
-                        
                     )
 
                 conn_info = _connections[connection_name]
@@ -287,7 +296,6 @@ def db_execute_factory(capture_snapshot: bool) -> Tool:
                             "text": f"Statement execution failed: {str(e)}",
                         }
                     ],
-                    
                 )
 
         return ToolResult(
@@ -326,8 +334,8 @@ def db_close_factory(capture_snapshot: bool) -> Tool:
         validated_params = DatabaseCloseInputSchema(**params)
 
         code = [
-            f"// Closing database connection",
-            f"await connection.close();",
+            f"# Closing database connection",
+            f"# Connection: {validated_params.connection_name or 'default'}",
         ]
 
         async def action() -> ToolActionResult:
@@ -342,7 +350,6 @@ def db_close_factory(capture_snapshot: bool) -> Tool:
                                 "text": f"Connection '{connection_name}' not found.",
                             }
                         ],
-                        
                     )
 
                 conn_info = _connections[connection_name]
@@ -369,7 +376,6 @@ def db_close_factory(capture_snapshot: bool) -> Tool:
                             "text": f"Failed to close connection: {str(e)}",
                         }
                     ],
-                    
                 )
 
         return ToolResult(

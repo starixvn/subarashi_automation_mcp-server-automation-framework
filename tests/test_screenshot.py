@@ -7,265 +7,463 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from tests.conftest import assert_text_content, assert_contains_text_content
 from context import ServerContext
 from config.settings import Config, get_default_config, config_to_settings
+from tools.vision import get_vision_tools, get_screenshot_tools
+from services.vision_service import VisionService
+from services.base_service import ServiceResult
 
 
 @pytest.mark.asyncio
-async def test_screenshot_viewport():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_image_data = base64.b64encode(b"fake_image_data").decode()
-            mock_execute.return_value = {
-                "success": True,
-                "result": {
-                    "screenshot": mock_image_data,
-                    "format": "png",
-                    "width": 1280,
-                    "height": 720,
-                },
-            }
-
-            result = await registry.execute_tool("browser_screenshot", {})
-
-            assert result["success"] is True
-            assert "screenshot" in result["result"]
-            assert result["result"]["format"] == "png"
-            assert result["result"]["width"] == 1280
-            assert result["result"]["height"] == 720
-
-
-@pytest.mark.asyncio
-async def test_screenshot_element():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_image_data = base64.b64encode(b"fake_element_image").decode()
-            mock_execute.return_value = {
-                "success": True,
-                "result": {
-                    "screenshot": mock_image_data,
-                    "format": "png",
-                    "element": "button",
-                    "width": 100,
-                    "height": 40,
-                },
-            }
-
-            result = await registry.execute_tool(
-                "browser_screenshot", {"selector": "button"}
-            )
-
-            assert result["success"] is True
-            assert "screenshot" in result["result"]
-            assert result["result"]["element"] == "button"
-
-
-@pytest.mark.asyncio
-async def test_screenshot_custom_filename():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = {
-                "success": True,
-                "result": {
-                    "filename": "custom_screenshot.png",
-                    "path": "/tmp/custom_screenshot.png",
-                    "format": "png",
-                },
-            }
-
-            result = await registry.execute_tool(
-                "browser_screenshot", {"filename": "custom_screenshot.png"}
-            )
-
-            assert result["success"] is True
-            assert result["result"]["filename"] == "custom_screenshot.png"
-            assert "path" in result["result"]
-
-
-@pytest.mark.asyncio
-async def test_screenshot_raw_format():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = {
-                "success": True,
-                "result": {
-                    "raw_data": b"fake_raw_image_data",
-                    "format": "png",
-                    "encoding": "raw",
-                },
-            }
-
-            result = await registry.execute_tool(
-                "browser_screenshot", {"format": "raw"}
-            )
-
-            assert result["success"] is True
-            assert "raw_data" in result["result"]
-            assert result["result"]["encoding"] == "raw"
-
-
-@pytest.mark.asyncio
-async def test_screenshot_output_directory():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        with patch("playwright.async_api.async_playwright") as mock_playwright:
-            mock_playwright_instance = AsyncMock()
-            mock_playwright.return_value.__aenter__.return_value = (
-                mock_playwright_instance
-            )
-
-            context = ServerContext(settings)
-            registry = context.tool_registry
-
-            with patch.object(registry, "execute_tool") as mock_execute:
-                expected_path = str(Path(temp_dir) / "screenshot.png")
-                mock_execute.return_value = {
-                    "success": True,
-                    "result": {
-                        "filename": "screenshot.png",
-                        "path": expected_path,
-                        "directory": temp_dir,
-                    },
-                }
-
-                result = await registry.execute_tool(
-                    "browser_screenshot", {"output_dir": temp_dir}
-                )
-
-                assert result["success"] is True
-                assert result["result"]["directory"] == temp_dir
-                assert temp_dir in result["result"]["path"]
-
-
-@pytest.mark.asyncio
-async def test_screenshot_image_responses_omit():
-    config = Config(
-        browser=get_default_config().browser,
-        server=get_default_config().server,
-        network=get_default_config().network,
-        capabilities=["core"],
+async def test_browser_screenshot():
+    # Test basic screenshot functionality
+    vision_tools = get_vision_tools(capture_snapshot=False)
+    screenshot_tool = next(
+        tool for tool in vision_tools if tool.schema.name == "browser_screenshot"
     )
-    settings = config_to_settings(config)
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result with bytes data
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Screenshot taken of https://example.com",
+        data={
+            "url": "https://example.com",
+            "full_page": False,
+            "has_screenshot": True,
+            "content": [
+                {
+                    "type": "screenshot",
+                    "data": b"fake_image_data",  # Raw bytes data
+                    "url": "https://example.com",
+                }
+            ],
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
+    mock_context.client_supports_images.return_value = True
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = {
-                "success": True,
-                "result": {
-                    "filename": "screenshot.png",
-                    "path": "/tmp/screenshot.png",
-                    "message": "Screenshot saved (image data omitted)",
-                },
-            }
+    with patch.object(
+        VisionService, "take_screenshot", return_value=mock_service_result
+    ):
+        result = await screenshot_tool.handle(mock_context, {"full_page": False})
 
-            result = await registry.execute_tool(
-                "browser_screenshot", {"omit_image": True}
-            )
+        # Test ToolResult structure
+        assert result.code == [
+            "# Take screenshot of current page",
+            "# Full page: False",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            assert result["success"] is True
-            assert "Screenshot saved" in result["result"]["message"]
-            assert "screenshot" not in result["result"]  # Image data omitted
-
-
-@pytest.mark.asyncio
-async def test_screenshot_error_handling():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = {
-                "success": False,
-                "error": "Element not found: invalid-selector",
-            }
-
-            result = await registry.execute_tool(
-                "browser_screenshot", {"selector": "invalid-selector"}
-            )
-
-            assert result["success"] is False
-            assert "Element not found" in result["error"]
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Screenshot taken of https://example.com"
+            in action_result.content[0]["text"]
+        )
 
 
 @pytest.mark.asyncio
-async def test_screenshot_base64_encoding():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_screenshot_full_page():
+    # Test full page screenshot
+    vision_tools = get_vision_tools(capture_snapshot=False)
+    screenshot_tool = next(
+        tool for tool in vision_tools if tool.schema.name == "browser_screenshot"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result with bytes data
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Screenshot taken of https://example.com",
+        data={
+            "url": "https://example.com",
+            "full_page": True,
+            "has_screenshot": True,
+            "content": [
+                {
+                    "type": "screenshot",
+                    "data": b"fake_fullpage_image_data",  # Raw bytes data
+                    "url": "https://example.com",
+                }
+            ],
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
+    mock_context.client_supports_images.return_value = True
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            original_data = b"fake_image_data_for_testing"
-            encoded_data = base64.b64encode(original_data).decode()
+    with patch.object(
+        VisionService, "take_screenshot", return_value=mock_service_result
+    ):
+        result = await screenshot_tool.handle(mock_context, {"full_page": True})
 
-            mock_execute.return_value = {
-                "success": True,
-                "result": {
-                    "screenshot": encoded_data,
-                    "format": "png",
-                    "encoding": "base64",
-                },
-            }
+        # Test ToolResult structure
+        assert result.code == [
+            "# Take screenshot of current page",
+            "# Full page: True",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_screenshot", {"encoding": "base64"}
-            )
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Screenshot taken of https://example.com"
+            in action_result.content[0]["text"]
+        )
 
-            assert result["success"] is True
-            assert result["result"]["encoding"] == "base64"
 
-            decoded_data = base64.b64decode(result["result"]["screenshot"])
-            assert decoded_data == original_data
+@pytest.mark.asyncio
+async def test_browser_save_screenshot():
+    # Test saving screenshot to file
+    vision_tools = get_vision_tools(capture_snapshot=False)
+    save_screenshot_tool = next(
+        tool for tool in vision_tools if tool.schema.name == "browser_save_screenshot"
+    )
+
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Screenshot saved to /tmp/test_screenshot.png",
+        data={
+            "filename": "test_screenshot.png",
+            "output_path": "/tmp/test_screenshot.png",
+            "full_page": False,
+        },
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        VisionService, "save_screenshot", return_value=mock_service_result
+    ):
+        result = await save_screenshot_tool.handle(
+            mock_context, {"filename": "test_screenshot.png", "full_page": False}
+        )
+
+        # Test ToolResult structure
+        assert result.code == [
+            "# Save screenshot to file",
+            "# Filename: test_screenshot.png",
+            "# Full page: False",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
+
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Screenshot saved to /tmp/test_screenshot.png"
+            in action_result.content[0]["text"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_browser_screen_click():
+    # Test screen clicking
+    vision_tools = get_vision_tools(capture_snapshot=True)
+    screen_click_tool = next(
+        tool for tool in vision_tools if tool.schema.name == "browser_screen_click"
+    )
+
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Clicked at coordinates (100, 200)",
+        data={"x": 100, "y": 200, "element": "button"},
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(VisionService, "screen_click", return_value=mock_service_result):
+        result = await screen_click_tool.handle(
+            mock_context, {"x": 100, "y": 200, "element": "button"}
+        )
+
+        # Test ToolResult structure
+        assert result.code == [
+            "# Click at screen coordinates",
+            "# Position: (100, 200)",
+            "# Element: button",
+        ]
+        assert result.capture_snapshot is True
+        assert result.wait_for_network is True
+        assert result.action is not None
+
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Clicked at coordinates (100, 200)" in action_result.content[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_browser_capture_snapshot():
+    # Test capturing page snapshot
+    vision_tools = get_vision_tools(capture_snapshot=False)
+    capture_snapshot_tool = next(
+        tool for tool in vision_tools if tool.schema.name == "browser_capture_snapshot"
+    )
+
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Page snapshot captured",
+        data={
+            "url": "https://example.com",
+            "text": "Example Domain\nThis domain is for use in illustrative examples in documents.",
+            "has_screenshot": True,
+            "include_screenshot": True,
+        },
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        VisionService, "capture_snapshot", return_value=mock_service_result
+    ):
+        result = await capture_snapshot_tool.handle(mock_context, {})
+
+        # Test ToolResult structure
+        assert result.code == [
+            "# Capture page snapshot",
+            "# Includes accessibility tree and page content",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
+
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_browser_screenshot_error():
+    # Test error handling in screenshot
+    vision_tools = get_vision_tools(capture_snapshot=False)
+    screenshot_tool = next(
+        tool for tool in vision_tools if tool.schema.name == "browser_screenshot"
+    )
+
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Failed to take screenshot: No page available",
+        error="No page available",
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        VisionService, "take_screenshot", return_value=mock_service_result
+    ):
+        result = await screenshot_tool.handle(mock_context, {"full_page": False})
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Failed to take screenshot: No page available"
+            in action_result.content[0]["text"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_browser_save_screenshot_error():
+    # Test error handling in save screenshot
+    vision_tools = get_vision_tools(capture_snapshot=False)
+    save_screenshot_tool = next(
+        tool for tool in vision_tools if tool.schema.name == "browser_save_screenshot"
+    )
+
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Failed to save screenshot: Could not save screenshot file",
+        error="Could not save screenshot file",
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        VisionService, "save_screenshot", return_value=mock_service_result
+    ):
+        result = await save_screenshot_tool.handle(
+            mock_context, {"filename": "test_screenshot.png", "full_page": False}
+        )
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Failed to save screenshot: Could not save screenshot file"
+            in action_result.content[0]["text"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_vision_capability_filtering():
+    # Test that vision tools have proper capability filtering
+    vision_tools = get_vision_tools(capture_snapshot=False)
+
+    # Check that we have the expected vision tools
+    tool_names = [tool.schema.name for tool in vision_tools]
+    expected_tools = [
+        "browser_screenshot",
+        "browser_save_screenshot",
+        "browser_screen_click",
+        "browser_capture_snapshot",
+    ]
+
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing vision tool: {expected_tool}"
+
+    # Check that all tools have VISION capability
+    from core.tool_schema import ToolCapability
+
+    for tool in vision_tools:
+        assert tool.capability == ToolCapability.VISION
+
+
+@pytest.mark.asyncio
+async def test_screenshot_tools_filtering():
+    # Test screenshot-only tools
+    screenshot_tools = get_screenshot_tools(capture_snapshot=False)
+
+    # Check that we have the expected screenshot tools
+    tool_names = [tool.schema.name for tool in screenshot_tools]
+    expected_tools = ["browser_screenshot", "browser_save_screenshot"]
+
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing screenshot tool: {expected_tool}"
+
+    # Check that all tools have VISION capability
+    from core.tool_schema import ToolCapability
+
+    for tool in screenshot_tools:
+        assert tool.capability == ToolCapability.VISION
+
+
+@pytest.mark.asyncio
+async def test_vision_tools_capture_snapshot_parameter():
+    # Test that vision tools respect capture_snapshot parameter
+    tools_with_snapshot = get_vision_tools(capture_snapshot=True)
+    tools_without_snapshot = get_vision_tools(capture_snapshot=False)
+
+    # Find screen click tool in both sets
+    screen_click_with_snapshot = next(
+        tool
+        for tool in tools_with_snapshot
+        if tool.schema.name == "browser_screen_click"
+    )
+    screen_click_without_snapshot = next(
+        tool
+        for tool in tools_without_snapshot
+        if tool.schema.name == "browser_screen_click"
+    )
+
+    # Create mock context and service result
+    mock_context = MagicMock()
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Clicked at coordinates (100, 100)",
+        data={"x": 100, "y": 100, "element": "button"},
+    )
+
+    with patch.object(VisionService, "screen_click", return_value=mock_service_result):
+        result_with_snapshot = await screen_click_with_snapshot.handle(
+            mock_context, {"x": 100, "y": 100, "element": "button"}
+        )
+        result_without_snapshot = await screen_click_without_snapshot.handle(
+            mock_context, {"x": 100, "y": 100, "element": "button"}
+        )
+
+        assert result_with_snapshot.capture_snapshot is True
+        assert result_without_snapshot.capture_snapshot is False
+
+
+@pytest.mark.asyncio
+async def test_vision_tools_schema_validation():
+    # Test that vision tools have proper schema validation
+    vision_tools = get_vision_tools(capture_snapshot=False)
+
+    for tool in vision_tools:
+        assert tool.schema.name is not None
+        assert tool.schema.title is not None
+        assert tool.schema.description is not None
+        assert tool.schema.input_schema is not None
+        assert tool.schema.tool_type is not None
+        assert tool.handle is not None
+        assert tool.capability is not None
+
+        # Test that vision tools have read-only type (screenshots don't modify page)
+        from core.tool_schema import ToolType
+
+        if tool.schema.name in [
+            "browser_screenshot",
+            "browser_save_screenshot",
+            "browser_capture_snapshot",
+        ]:
+            assert tool.schema.tool_type == ToolType.READ_ONLY
+        else:  # browser_screen_click
+            assert tool.schema.tool_type == ToolType.DESTRUCTIVE
+
+
+@pytest.mark.asyncio
+async def test_vision_tools_network_settings():
+    # Test that vision tools have proper network settings
+    vision_tools = get_vision_tools(capture_snapshot=False)
+
+    for tool in vision_tools:
+        mock_context = MagicMock()
+        mock_service_result = ServiceResult(
+            success=True, message="Operation successful", data={}
+        )
+
+        with patch.object(
+            VisionService, "take_screenshot", return_value=mock_service_result
+        ):
+            with patch.object(
+                VisionService, "save_screenshot", return_value=mock_service_result
+            ):
+                with patch.object(
+                    VisionService, "screen_click", return_value=mock_service_result
+                ):
+                    with patch.object(
+                        VisionService,
+                        "capture_snapshot",
+                        return_value=mock_service_result,
+                    ):
+                        if tool.schema.name == "browser_screenshot":
+                            result = await tool.handle(
+                                mock_context, {"full_page": False}
+                            )
+                        elif tool.schema.name == "browser_save_screenshot":
+                            result = await tool.handle(
+                                mock_context,
+                                {"filename": "test.png", "full_page": False},
+                            )
+                        elif tool.schema.name == "browser_screen_click":
+                            result = await tool.handle(
+                                mock_context, {"x": 100, "y": 100, "element": "button"}
+                            )
+                        elif tool.schema.name == "browser_capture_snapshot":
+                            result = await tool.handle(mock_context, {})
+
+                        # Vision operations shouldn't wait for network except screen_click
+                        if tool.schema.name == "browser_screen_click":
+                            assert result.wait_for_network is True
+                        else:
+                            assert result.wait_for_network is False

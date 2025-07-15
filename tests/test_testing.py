@@ -9,391 +9,273 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tests.conftest import assert_text_content, assert_contains_text_content
 from context import ServerContext
 from config.settings import Config, get_default_config, config_to_settings
+from tools.testing import get_testing_tools
+from services.testing_service import TestingService
+from services.base_service import ServiceResult
 
 
 @pytest.mark.asyncio
 async def test_browser_generate_test_basic():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test basic test generation
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    generate_test_tool = next(tool for tool in testing_tools if tool.schema.name == "browser_generate_test")
+    
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Test code generated successfully",
+        data={
+            "url": "https://example.com",
+            "title": "Example Domain",
+            "test_code": """import { test, expect } from '@playwright/test';
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Generate test code for current page state
-const generator = new TestGenerator(page);
-const testCode = await generator.generateTest();
-```
-
-Generated Test Code:
-```javascript
-const { test, expect } = require('@playwright/test');
-
-test('page interaction test', async ({ page }) => {
+test('Test for Example Domain', async ({ page }) => {
   await page.goto('https://example.com');
-  await page.click('button[data-testid="submit"]');
-  await page.fill('input[name="email"]', 'test@example.com');
-  await expect(page.locator('.success-message')).toBeVisible();
-});
-```
-
-Test saved to: test_generated.spec.js
-""",
-                }
-            ]
-
-            result = await registry.execute_tool("browser_generate_test", {})
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Generate test code for current page state" in text_content
-            assert "Generated Test Code:" in text_content
-            assert "const { test, expect } = require('@playwright/test');" in text_content
-            assert "await page.goto('https://example.com');" in text_content
-            assert "Test saved to: test_generated.spec.js" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_generate_test_with_assertions():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Generate test code with assertions
-const generator = new TestGenerator(page, { includeAssertions: true });
-const testCode = await generator.generateTest();
-```
-
-Generated Test Code with Assertions:
-```javascript
-const { test, expect } = require('@playwright/test');
-
-test('form submission with validation', async ({ page }) => {
-  await page.goto('https://form.example.com');
-  
-  // Check initial state
-  await expect(page.locator('h1')).toHaveText('Contact Form');
-  await expect(page.locator('#submit-btn')).toBeDisabled();
-  
-  // Fill form
-  await page.fill('input[name="name"]', 'John Doe');
-  await page.fill('input[name="email"]', 'john@example.com');
-  await page.fill('textarea[name="message"]', 'Hello world');
-  
-  // Verify button is now enabled
-  await expect(page.locator('#submit-btn')).toBeEnabled();
-  
-  // Submit form
-  await page.click('#submit-btn');
-  
-  // Verify success
-  await expect(page.locator('.success-alert')).toBeVisible();
-  await expect(page.locator('.success-alert')).toHaveText('Message sent successfully!');
-});
-```
-
-Test features:
-- State verification
-- Form interaction
-- Validation checks
-- Success confirmation
-
-Test saved to: form_test.spec.js
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_generate_test", {"include_assertions": True}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Generate test code with assertions" in text_content
-            assert "Generated Test Code with Assertions:" in text_content
-            assert "await expect(page.locator('h1')).toHaveText('Contact Form');" in text_content
-            assert "State verification" in text_content
-            assert "Form interaction" in text_content
-            assert "Validation checks" in text_content
+  await expect(page).toHaveTitle('Example Domain');
+});"""
+        }
+    )
+    
+    # Create mock context
+    mock_context = MagicMock()
+    
+    with patch.object(TestingService, 'generate_test', return_value=mock_service_result):
+        result = await generate_test_tool.handle(mock_context, {})
+        
+        # Test ToolResult structure
+        assert result.code == [
+            "# Generate test code for current page",
+            "# Creates Playwright test template",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
+        
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Generated test:" in action_result.content[0]["text"]
+        assert "import { test, expect } from '@playwright/test';" in action_result.content[0]["text"]
+        assert "Example Domain" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_generate_test_custom_filename():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_generate_test_with_complex_page():
+    # Test test generation for complex page
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    generate_test_tool = next(tool for tool in testing_tools if tool.schema.name == "browser_generate_test")
+    
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Test code generated successfully",
+        data={
+            "url": "https://app.example.com/login",
+            "title": "Login - Example App",
+            "test_code": """import { test, expect } from '@playwright/test';
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Generate test code with custom filename
-const generator = new TestGenerator(page);
-const testCode = await generator.generateTest({ filename: 'login_flow.spec.js' });
-```
-
-Generated Test Code:
-```javascript
-const { test, expect } = require('@playwright/test');
-
-test('login flow test', async ({ page }) => {
+test('Test for Login - Example App', async ({ page }) => {
   await page.goto('https://app.example.com/login');
-  await page.fill('#username', 'testuser');
-  await page.fill('#password', 'secret123');
-  await page.click('#login-btn');
-  await expect(page).toHaveURL('https://app.example.com/dashboard');
-});
-```
-
-Test saved to: login_flow.spec.js
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_generate_test", {"filename": "login_flow.spec.js"}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Generate test code with custom filename" in text_content
-            assert "Test saved to: login_flow.spec.js" in text_content
-            assert "test('login flow test'" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_generate_test_multiple_languages():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        def get_sample_code(language):
-            if language == "javascript":
-                return "const { test, expect } = require('@playwright/test');"
-            elif language == "typescript":
-                return "import { test, expect } from '@playwright/test';"
-            elif language == "python":
-                return "import pytest\nfrom playwright.sync_api import Page, expect"
-            elif language == "java":
-                return "import com.microsoft.playwright.*;"
-            elif language == "csharp":
-                return "using Microsoft.Playwright;"
-            return ""
-
-        def get_extension(language):
-            extensions = {
-                "javascript": "spec.js",
-                "typescript": "spec.ts",
-                "python": "test.py",
-                "java": "java",
-                "csharp": "cs",
-            }
-            return extensions.get(language, "txt")
-
-        languages = ["javascript", "typescript", "python"]
-
-        for language in languages:
-            with patch.object(registry, "execute_tool") as mock_execute:
-                mock_execute.return_value = MagicMock()
-                mock_execute.return_value.content = [
-                    {
-                        "type": "text",
-                        "text": f"""
-- Ran Playwright code:
-```js
-// Generate test code in {language}
-const generator = new TestGenerator(page, {{ language: '{language}' }});
-const testCode = await generator.generateTest();
-```
-
-Generated {language.capitalize()} Test Code:
-```{language}
-{get_sample_code(language)}
-```
-
-Test saved to: test.{get_extension(language)}
-""",
-                    }
-                ]
-
-                result = await registry.execute_tool(
-                    "browser_generate_test", {"language": language}
-                )
-
-                assert hasattr(result, "content")
-                assert result.content is not None
-                text_content = ""
-                for item in result.content:
-                    if item.get("type") == "text":
-                        text_content += item.get("text", "")
-
-                assert f"Generate test code in {language}" in text_content
-                assert f"Generated {language.capitalize()} Test Code:" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_generate_test_with_data_attributes():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Generate test code prioritizing data attributes
-const generator = new TestGenerator(page, { preferDataAttributes: true });
-const testCode = await generator.generateTest();
-```
-
-Generated Test Code (Data Attribute Optimized):
-```javascript
-const { test, expect } = require('@playwright/test');
-
-test('shopping cart test', async ({ page }) => {
-  await page.goto('https://shop.example.com');
-  
-  // Use data-testid attributes for reliable selectors
-  await page.click('[data-testid="add-to-cart-btn"]');
-  await page.click('[data-testid="cart-icon"]');
-  await expect(page.locator('[data-testid="cart-item"]')).toBeVisible();
-  await page.click('[data-testid="checkout-btn"]');
-  
-  // Form interactions with data attributes
-  await page.fill('[data-testid="email-input"]', 'customer@example.com');
-  await page.fill('[data-testid="address-input"]', '123 Main St');
-  await page.click('[data-testid="place-order-btn"]');
-  
-  await expect(page.locator('[data-testid="success-message"]')).toHaveText('Order placed successfully!');
-});
-```
-
-Selector Strategy: Data attributes prioritized for stability
-Test saved to: shopping_cart.spec.js
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_generate_test", {"prefer_data_attributes": True}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Generate test code prioritizing data attributes" in text_content
-            assert "Data Attribute Optimized" in text_content
-            assert '[data-testid="add-to-cart-btn"]' in text_content
-            assert "Selector Strategy: Data attributes prioritized" in text_content
+  await expect(page).toHaveTitle('Login - Example App');
+});"""
+        }
+    )
+    
+    # Create mock context
+    mock_context = MagicMock()
+    
+    with patch.object(TestingService, 'generate_test', return_value=mock_service_result):
+        result = await generate_test_tool.handle(mock_context, {})
+        
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Generated test:" in action_result.content[0]["text"]
+        assert "Login - Example App" in action_result.content[0]["text"]
+        assert "https://app.example.com/login" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_browser_generate_test_error_handling():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test error handling in test generation
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    generate_test_tool = next(tool for tool in testing_tools if tool.schema.name == "browser_generate_test")
+    
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Failed to generate test: No page available",
+        error="No page available"
+    )
+    
+    # Create mock context
+    mock_context = MagicMock()
+    
+    with patch.object(TestingService, 'generate_test', return_value=mock_service_result):
+        result = await generate_test_tool.handle(mock_context, {})
+        
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Failed to generate test: No page available" in action_result.content[0]["text"]
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+@pytest.mark.asyncio
+async def test_browser_generate_test_with_special_characters():
+    # Test test generation with special characters in title
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    generate_test_tool = next(tool for tool in testing_tools if tool.schema.name == "browser_generate_test")
+    
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Test code generated successfully",
+        data={
+            "url": "https://example.com/special",
+            "title": "Special & \"Quoted\" Page",
+            "test_code": """import { test, expect } from '@playwright/test';
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.side_effect = Exception("No interactions recorded on current page")
+test('Test for Special & "Quoted" Page', async ({ page }) => {
+  await page.goto('https://example.com/special');
+  await expect(page).toHaveTitle('Special & "Quoted" Page');
+});"""
+        }
+    )
+    
+    # Create mock context
+    mock_context = MagicMock()
+    
+    with patch.object(TestingService, 'generate_test', return_value=mock_service_result):
+        result = await generate_test_tool.handle(mock_context, {})
+        
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Generated test:" in action_result.content[0]["text"]
+        assert "Special & \"Quoted\" Page" in action_result.content[0]["text"]
 
-            with pytest.raises(Exception, match="No interactions recorded on current page"):
-                await registry.execute_tool("browser_generate_test", {})
+
+@pytest.mark.asyncio
+async def test_browser_generate_test_empty_page():
+    # Test test generation for empty page
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    generate_test_tool = next(tool for tool in testing_tools if tool.schema.name == "browser_generate_test")
+    
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Test code generated successfully",
+        data={
+            "url": "about:blank",
+            "title": "",
+            "test_code": """import { test, expect } from '@playwright/test';
+
+test('Test for ', async ({ page }) => {
+  await page.goto('about:blank');
+  await expect(page).toHaveTitle('');
+});"""
+        }
+    )
+    
+    # Create mock context
+    mock_context = MagicMock()
+    
+    with patch.object(TestingService, 'generate_test', return_value=mock_service_result):
+        result = await generate_test_tool.handle(mock_context, {})
+        
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Generated test:" in action_result.content[0]["text"]
+        assert "about:blank" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_testing_capability_filtering():
-    config = Config(
-        browser=get_default_config().browser,
-        server=get_default_config().server,
-        network=get_default_config().network,
-        capabilities=["core", "testing"],
+    # Test that testing tools have proper capability filtering
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    
+    # Check that we have the expected testing tools
+    tool_names = [tool.schema.name for tool in testing_tools]
+    expected_tools = ["browser_generate_test"]
+    
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing testing tool: {expected_tool}"
+    
+    # Check that all tools have TESTING capability
+    from core.tool_schema import ToolCapability
+    for tool in testing_tools:
+        assert tool.capability == ToolCapability.TESTING
+
+
+@pytest.mark.asyncio
+async def test_testing_tools_capture_snapshot_parameter():
+    # Test that testing tools respect capture_snapshot parameter
+    tools_with_snapshot = get_testing_tools(capture_snapshot=True)
+    tools_without_snapshot = get_testing_tools(capture_snapshot=False)
+    
+    # Find generate test tool in both sets
+    generate_test_with_snapshot = next(tool for tool in tools_with_snapshot if tool.schema.name == "browser_generate_test")
+    generate_test_without_snapshot = next(tool for tool in tools_without_snapshot if tool.schema.name == "browser_generate_test")
+    
+    # Create mock context and service result
+    mock_context = MagicMock()
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Test code generated successfully",
+        data={
+            "url": "https://example.com",
+            "title": "Example Domain",
+            "test_code": "test code"
+        }
     )
-    settings = config_to_settings(config)
+    
+    with patch.object(TestingService, 'generate_test', return_value=mock_service_result):
+        result_with_snapshot = await generate_test_with_snapshot.handle(mock_context, {})
+        result_without_snapshot = await generate_test_without_snapshot.handle(mock_context, {})
+        
+        assert result_with_snapshot.capture_snapshot is True
+        assert result_without_snapshot.capture_snapshot is False
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+@pytest.mark.asyncio
+async def test_testing_tools_schema_validation():
+    # Test that testing tools have proper schema validation
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    
+    for tool in testing_tools:
+        assert tool.schema.name is not None
+        assert tool.schema.title is not None
+        assert tool.schema.description is not None
+        assert tool.schema.input_schema is not None
+        assert tool.schema.tool_type is not None
+        assert tool.handle is not None
+        assert tool.capability is not None
+        
+        # Test that testing tools have read-only type
+        from core.tool_schema import ToolType
+        assert tool.schema.tool_type == ToolType.READ_ONLY
 
-        tools = await registry.list_tools()
-        tool_names = {tool["name"] for tool in tools}
 
-        assert "browser_generate_test" in tool_names 
+@pytest.mark.asyncio
+async def test_testing_tools_network_settings():
+    # Test that testing tools have proper network settings
+    testing_tools = get_testing_tools(capture_snapshot=False)
+    
+    for tool in testing_tools:
+        mock_context = MagicMock()
+        mock_service_result = ServiceResult(
+            success=True,
+            message="Test code generated successfully",
+            data={
+                "url": "https://example.com",
+                "title": "Example Domain",
+                "test_code": "test code"
+            }
+        )
+        
+        with patch.object(TestingService, 'generate_test', return_value=mock_service_result):
+            result = await tool.handle(mock_context, {})
+            
+            # Testing operations shouldn't wait for network
+            assert result.wait_for_network is False 

@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def websocket_server(scope: Scope, receive: Receive, send: Send):
-
     websocket = WebSocket(scope, receive, send)
     await websocket.accept(subprotocol="mcp")
 

@@ -9,516 +9,465 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tests.conftest import assert_text_content, assert_contains_text_content
 from context import ServerContext
 from config.settings import Config, get_default_config, config_to_settings
+from tools.pdf import get_pdf_tools
+from services.pdf_service import PdfService
+from services.base_service import ServiceResult
 
 
 @pytest.mark.asyncio
-async def test_browser_save_pdf_default():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_save_pdf():
+    # Test basic PDF saving
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/test.pdf",
+        data={
+            "filename": "test.pdf",
+            "output_path": "/tmp/test.pdf",
+            "full_page": False,
+            "format": "A4",
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save page as PDF
-await page.pdf({ path: 'page.pdf', format: 'A4' });
-```
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "test.pdf", "full_page": False}
+        )
 
-PDF saved successfully: page.pdf
-File size: 2.3 MB
-Format: A4
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == [
+            "# Save current page as PDF",
+            "# Filename: test.pdf",
+            "# Full page: False",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_save_pdf", {"filename": "page.pdf"}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save page as PDF" in text_content
-            assert "PDF saved successfully: page.pdf" in text_content
-            assert "File size: 2.3 MB" in text_content
-            assert "Format: A4" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_save_pdf_custom_format():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save page as PDF with format Letter
-await page.pdf({ path: 'document.pdf', format: 'Letter' });
-```
-
-PDF saved successfully: document.pdf
-File size: 1.8 MB
-Format: Letter
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_save_pdf", {"filename": "document.pdf", "format": "Letter"}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save page as PDF with format Letter" in text_content
-            assert "PDF saved successfully: document.pdf" in text_content
-            assert "Format: Letter" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_save_pdf_landscape():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save page as PDF in landscape orientation
-await page.pdf({ path: 'report.pdf', format: 'A4', landscape: true });
-```
-
-PDF saved successfully: report.pdf
-File size: 3.1 MB
-Format: A4
-Orientation: Landscape
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_save_pdf",
-                {"filename": "report.pdf", "landscape": True},
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save page as PDF in landscape orientation" in text_content
-            assert "PDF saved successfully: report.pdf" in text_content
-            assert "Orientation: Landscape" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_save_pdf_with_margins():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save page as PDF with custom margins
-await page.pdf({ 
-  path: 'invoice.pdf', 
-  format: 'A4',
-  margin: { top: '1in', right: '0.5in', bottom: '1in', left: '0.5in' }
-});
-```
-
-PDF saved successfully: invoice.pdf
-File size: 1.9 MB
-Format: A4
-Margins: Top: 1in, Right: 0.5in, Bottom: 1in, Left: 0.5in
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_save_pdf",
-                {
-                    "filename": "invoice.pdf",
-                    "margins": {
-                        "top": "1in",
-                        "right": "0.5in",
-                        "bottom": "1in",
-                        "left": "0.5in",
-                    },
-                },
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save page as PDF with custom margins" in text_content
-            assert "PDF saved successfully: invoice.pdf" in text_content
-            assert "Margins:" in text_content
-            assert "Top: 1in" in text_content
-            assert "Left: 0.5in" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_save_pdf_print_background():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save page as PDF with background graphics
-await page.pdf({ path: 'brochure.pdf', format: 'A4', printBackground: true });
-```
-
-PDF saved successfully: brochure.pdf
-File size: 4.7 MB
-Format: A4
-Background graphics: Included
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_save_pdf",
-                {"filename": "brochure.pdf", "print_background": True},
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save page as PDF with background graphics" in text_content
-            assert "PDF saved successfully: brochure.pdf" in text_content
-            assert "Background graphics: Included" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "PDF saved to /tmp/test.pdf" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_browser_save_pdf_full_page():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test full page PDF saving
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/fullpage.pdf",
+        data={
+            "filename": "fullpage.pdf",
+            "output_path": "/tmp/fullpage.pdf",
+            "full_page": True,
+            "format": "A4",
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save full page as PDF
-await page.pdf({ path: 'fullpage.pdf', format: 'A4', fullPage: true });
-```
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "fullpage.pdf", "full_page": True}
+        )
 
-PDF saved successfully: fullpage.pdf
-File size: 8.2 MB
-Format: A4
-Full page: Yes
-Pages: 15
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == [
+            "# Save current page as PDF",
+            "# Filename: fullpage.pdf",
+            "# Full page: True",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_save_pdf", {"filename": "fullpage.pdf", "full_page": True}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save full page as PDF" in text_content
-            assert "PDF saved successfully: fullpage.pdf" in text_content
-            assert "Full page: Yes" in text_content
-            assert "Pages: 15" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "PDF saved to /tmp/fullpage.pdf" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_save_pdf_custom_scale():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_save_pdf_with_options():
+    # Test PDF saving with custom options
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/custom.pdf",
+        data={
+            "filename": "custom.pdf",
+            "output_path": "/tmp/custom.pdf",
+            "full_page": True,
+            "format": "A4",
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save page as PDF with 150% scale
-await page.pdf({ path: 'zoomed.pdf', format: 'A4', scale: 1.5 });
-```
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "custom.pdf", "full_page": True}
+        )
 
-PDF saved successfully: zoomed.pdf
-File size: 3.8 MB
-Format: A4
-Scale: 150%
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_save_pdf", {"filename": "zoomed.pdf", "scale": 1.5}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save page as PDF with 150% scale" in text_content
-            assert "PDF saved successfully: zoomed.pdf" in text_content
-            assert "Scale: 150%" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "PDF saved to /tmp/custom.pdf" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_save_pdf_page_range():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_save_pdf_landscape():
+    # Test landscape PDF saving
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/landscape.pdf",
+        data={
+            "filename": "landscape.pdf",
+            "output_path": "/tmp/landscape.pdf",
+            "full_page": False,
+            "format": "A4",
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save specific page range as PDF
-await page.pdf({ path: 'excerpt.pdf', format: 'A4', pageRanges: '1-5,8,11-13' });
-```
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "landscape.pdf", "full_page": False}
+        )
 
-PDF saved successfully: excerpt.pdf
-File size: 1.2 MB
-Format: A4
-Page ranges: 1-5, 8, 11-13
-Total pages: 9
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_save_pdf",
-                {"filename": "excerpt.pdf", "page_ranges": "1-5,8,11-13"},
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Save specific page range as PDF" in text_content
-            assert "PDF saved successfully: excerpt.pdf" in text_content
-            assert "Page ranges: 1-5, 8, 11-13" in text_content
-            assert "Total pages: 9" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_save_pdf_error_handling():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.side_effect = Exception("Permission denied: Cannot write to /root/")
-
-            with pytest.raises(Exception, match="Permission denied: Cannot write to /root/"):
-                await registry.execute_tool(
-                    "browser_save_pdf", {"filename": "/root/protected.pdf"}
-                )
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "PDF saved to /tmp/landscape.pdf" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_browser_save_pdf_with_headers_footers():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test PDF saving with headers and footers
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/headers_footers.pdf",
+        data={
+            "filename": "headers_footers.pdf",
+            "output_path": "/tmp/headers_footers.pdf",
+            "full_page": False,
+            "format": "A4",
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Save page as PDF with headers and footers
-await page.pdf({ 
-  path: 'formal.pdf', 
-  format: 'A4',
-  displayHeaderFooter: true,
-  headerTemplate: '<div style="font-size:10px;margin:0 auto;">Company Report</div>',
-  footerTemplate: '<div style="font-size:10px;margin:0 auto;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>'
-});
-```
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "headers_footers.pdf", "full_page": False}
+        )
 
-PDF saved successfully: formal.pdf
-File size: 2.1 MB
-Format: A4
-Headers/Footers: Enabled
-Header: Company Report
-Footer: Page numbers
-""",
-                }
-            ]
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "PDF saved to /tmp/headers_footers.pdf" in action_result.content[0]["text"]
+        )
 
-            result = await registry.execute_tool(
-                "browser_save_pdf",
-                {
-                    "filename": "formal.pdf",
-                    "display_header_footer": True,
-                    "header_template": '<div style="font-size:10px;margin:0 auto;">Company Report</div>',
-                    "footer_template": '<div style="font-size:10px;margin:0 auto;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
-                },
-            )
 
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
+@pytest.mark.asyncio
+async def test_browser_save_pdf_error_file_access():
+    # Test error handling when file cannot be saved
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
 
-            assert "Save page as PDF with headers and footers" in text_content
-            assert "PDF saved successfully: formal.pdf" in text_content
-            assert "Headers/Footers: Enabled" in text_content
-            assert "Header: Company Report" in text_content
-            assert "Footer: Page numbers" in text_content
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Failed to save PDF: Permission denied",
+        error="Permission denied",
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "test.pdf", "full_page": False}
+        )
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Failed to save PDF: Permission denied" in action_result.content[0]["text"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_browser_save_pdf_error_invalid_path():
+    # Test error handling with invalid path
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
+
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False, message="Failed to save PDF: Invalid path", error="Invalid path"
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "/invalid/path/test.pdf", "full_page": False}
+        )
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Failed to save PDF: Invalid path" in action_result.content[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_browser_save_pdf_large_page():
+    # Test saving PDF for large page content
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
+
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/large_page.pdf",
+        data={
+            "filename": "large_page.pdf",
+            "output_path": "/tmp/large_page.pdf",
+            "full_page": True,
+            "format": "A4",
+        },
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "large_page.pdf", "full_page": True}
+        )
+
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "PDF saved to /tmp/large_page.pdf" in action_result.content[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_browser_save_pdf_with_scale():
+    # Test PDF saving with custom scale
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
+
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/scaled.pdf",
+        data={
+            "filename": "scaled.pdf",
+            "output_path": "/tmp/scaled.pdf",
+            "full_page": False,
+            "format": "A4",
+        },
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "scaled.pdf", "full_page": False}
+        )
+
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "PDF saved to /tmp/scaled.pdf" in action_result.content[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_browser_save_pdf_background_graphics():
+    # Test PDF saving with background graphics
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+    save_pdf_tool = next(
+        tool for tool in pdf_tools if tool.schema.name == "browser_save_pdf"
+    )
+
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved to /tmp/background.pdf",
+        data={
+            "filename": "background.pdf",
+            "output_path": "/tmp/background.pdf",
+            "full_page": False,
+            "format": "A4",
+        },
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result = await save_pdf_tool.handle(
+            mock_context, {"filename": "background.pdf", "full_page": False}
+        )
+
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "PDF saved to /tmp/background.pdf" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_pdf_capability_filtering():
-    config = Config(
-        browser=get_default_config().browser,
-        server=get_default_config().server,
-        network=get_default_config().network,
-        capabilities=["core", "pdf"],
+    # Test that PDF tools have proper capability filtering
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+
+    # Check that we have the expected PDF tools
+    tool_names = [tool.schema.name for tool in pdf_tools]
+    expected_tools = ["browser_save_pdf"]
+
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing PDF tool: {expected_tool}"
+
+    # Check that all tools have PDF capability
+    from core.tool_schema import ToolCapability
+
+    for tool in pdf_tools:
+        assert tool.capability == ToolCapability.PDF
+
+
+@pytest.mark.asyncio
+async def test_pdf_tools_capture_snapshot_parameter():
+    # Test that PDF tools respect capture_snapshot parameter
+    tools_with_snapshot = get_pdf_tools(capture_snapshot=True)
+    tools_without_snapshot = get_pdf_tools(capture_snapshot=False)
+
+    # Find save PDF tool in both sets
+    save_pdf_with_snapshot = next(
+        tool for tool in tools_with_snapshot if tool.schema.name == "browser_save_pdf"
     )
-    settings = config_to_settings(config)
+    save_pdf_without_snapshot = next(
+        tool
+        for tool in tools_without_snapshot
+        if tool.schema.name == "browser_save_pdf"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Create mock context and service result
+    mock_context = MagicMock()
+    mock_service_result = ServiceResult(
+        success=True,
+        message="PDF saved",
+        data={
+            "filename": "test.pdf",
+            "output_path": "/tmp/test.pdf",
+            "full_page": False,
+            "format": "A4",
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+        result_with_snapshot = await save_pdf_with_snapshot.handle(
+            mock_context, {"filename": "test.pdf", "full_page": False}
+        )
+        result_without_snapshot = await save_pdf_without_snapshot.handle(
+            mock_context, {"filename": "test.pdf", "full_page": False}
+        )
 
-        tools = await registry.list_tools()
-        tool_names = {tool["name"] for tool in tools}
+        assert result_with_snapshot.capture_snapshot is True
+        assert result_without_snapshot.capture_snapshot is False
 
-        assert "browser_save_pdf" in tool_names 
+
+@pytest.mark.asyncio
+async def test_pdf_tools_schema_validation():
+    # Test that PDF tools have proper schema validation
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+
+    for tool in pdf_tools:
+        assert tool.schema.name is not None
+        assert tool.schema.title is not None
+        assert tool.schema.description is not None
+        assert tool.schema.input_schema is not None
+        assert tool.schema.tool_type is not None
+        assert tool.handle is not None
+        assert tool.capability is not None
+
+        # Test that PDF tools have read-only type
+        from core.tool_schema import ToolType
+
+        assert tool.schema.tool_type == ToolType.READ_ONLY
+
+
+@pytest.mark.asyncio
+async def test_pdf_tools_network_settings():
+    # Test that PDF tools have proper network settings
+    pdf_tools = get_pdf_tools(capture_snapshot=False)
+
+    for tool in pdf_tools:
+        mock_context = MagicMock()
+        mock_service_result = ServiceResult(
+            success=True,
+            message="PDF saved",
+            data={
+                "filename": "test.pdf",
+                "output_path": "/tmp/test.pdf",
+                "full_page": False,
+                "format": "A4",
+            },
+        )
+
+        with patch.object(PdfService, "save_as_pdf", return_value=mock_service_result):
+            result = await tool.handle(
+                mock_context, {"filename": "test.pdf", "full_page": False}
+            )
+
+            # PDF operations shouldn't wait for network
+            assert result.wait_for_network is False

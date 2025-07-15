@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -9,7 +9,8 @@ from .tool_schema import (
     ToolSchema,
     ModalStateType,
 )
-from .schemas import DialogInputSchema
+from core.schemas import DialogInputSchema
+from services.dialogs_service import DialogsService
 
 if TYPE_CHECKING:
     from ..context import ServerContext
@@ -24,36 +25,29 @@ if TYPE_CHECKING:
     tool_type=ToolType.DESTRUCTIVE,
 )
 def browser_handle_dialog_factory(capture_snapshot: bool) -> Tool:
-
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = DialogInputSchema(**params)
 
-        dialog_state = None
-        for state in context.modal_states():
-            if state.type.value == "dialog":
-                dialog_state = state
-                break
-
-        if not dialog_state:
-            raise Exception("No dialog visible")
-
-        if validated_params.accept:
-            await dialog_state.dialog.accept(validated_params.prompt_text or "")
-        else:
-            await dialog_state.dialog.dismiss()
-
-        context.clear_modal_state(dialog_state)
+        service = DialogsService(context)
 
         code = [
-            f'// <internal code to handle "{dialog_state.dialog.type}" dialog>',
+            f"# Handle dialog",
+            f"# Action: {'accept' if validated_params.accept else 'dismiss'}",
         ]
 
+        if validated_params.accept and validated_params.prompt_text:
+            code.append(f"# Prompt text: '{validated_params.prompt_text}'")
+
         async def action() -> ToolActionResult:
+            result = await service.handle_dialog(
+                validated_params.accept, validated_params.prompt_text
+            )
+
             return ToolActionResult(
                 content=[
                     {
                         "type": "text",
-                        "text": f"Dialog {'accepted' if validated_params.accept else 'dismissed'}",
+                        "text": result.message,
                     }
                 ]
             )
@@ -82,7 +76,6 @@ def browser_handle_dialog_factory(capture_snapshot: bool) -> Tool:
 
 
 def get_dialog_tools(capture_snapshot: bool = True) -> list[Tool]:
-
     return [
         browser_handle_dialog_factory(capture_snapshot),
     ]

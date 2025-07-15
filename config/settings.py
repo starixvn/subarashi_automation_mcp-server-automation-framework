@@ -8,7 +8,6 @@ from datetime import datetime
 
 
 class Settings:
-
     def __init__(
         self,
         browser_type: str = "chromium",
@@ -59,7 +58,6 @@ class Settings:
 
 @dataclass
 class LaunchOptions:
-
     channel: Optional[str] = None
     executable_path: Optional[str] = None
     headless: Optional[bool] = None
@@ -71,7 +69,6 @@ class LaunchOptions:
 
 @dataclass
 class ContextOptions:
-
     viewport: Optional[Dict[str, int]] = None
     storage_state: Optional[str] = None
     user_agent: Optional[str] = None
@@ -81,7 +78,6 @@ class ContextOptions:
 
 @dataclass
 class BrowserConfig:
-
     browser_agent: Optional[str] = None
     browser_name: Literal["chromium", "firefox", "webkit"] = "chromium"
     isolated: bool = False
@@ -94,21 +90,18 @@ class BrowserConfig:
 
 @dataclass
 class ServerConfig:
-
     port: Optional[int] = None
     host: str = "localhost"
 
 
 @dataclass
 class NetworkConfig:
-
     allowed_origins: Optional[List[str]] = None
     blocked_origins: Optional[List[str]] = None
 
 
 @dataclass
 class CLIOptions:
-
     allowed_origins: Optional[List[str]] = None
     blocked_origins: Optional[List[str]] = None
     block_service_workers: bool = False
@@ -140,7 +133,6 @@ class CLIOptions:
 
 @dataclass
 class Config:
-
     browser: Optional[BrowserConfig] = None
     server: Optional[ServerConfig] = None
     capabilities: Optional[List[str]] = None
@@ -154,7 +146,6 @@ class Config:
 
 @dataclass
 class FullConfig(Config):
-
     browser: BrowserConfig = field(default_factory=BrowserConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     network: NetworkConfig = field(default_factory=NetworkConfig)

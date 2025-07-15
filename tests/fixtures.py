@@ -21,7 +21,7 @@ from config.settings import (
 )
 from context import ServerContext
 from core.browser_context_factory import BrowserContextManager
-from tools.registry import EnhancedToolRegistry
+from core.registry import EnhancedToolRegistry
 from server import create_server
 
 

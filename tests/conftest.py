@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.settings import FullConfig, get_default_config, resolve_config
 from context import ServerContext
 from core.browser_context_factory import BrowserContextManager
-from tools.registry import EnhancedToolRegistry
+from core.registry import EnhancedToolRegistry
 
 
 class TestServer:

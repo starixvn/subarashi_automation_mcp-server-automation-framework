@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DownloadEntry:
-
     download: "Download"
     tab: "Tab"
     started_at: datetime = field(default_factory=datetime.now)
@@ -43,7 +42,6 @@ class DownloadEntry:
 
 
 class DownloadTracker:
-
     def __init__(self, output_dir: Path):
         self.output_dir = output_dir
         self._downloads: List[DownloadEntry] = []

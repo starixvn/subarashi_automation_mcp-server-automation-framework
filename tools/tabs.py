@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool,
     define_tool_factory,
     ToolCapability,
@@ -9,7 +9,7 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import (
+from core.schemas import (
     EmptyInputSchema,
     NewTabInputSchema,
     SelectTabInputSchema,
@@ -18,30 +18,51 @@ from .schemas import (
 
 if TYPE_CHECKING:
     from ..context import ServerContext
+    from ..services import TabsService
+
+
+def _get_tabs_service(context: "ServerContext") -> "TabsService":
+    from services import TabsService
+    return TabsService(context)
 
 
 def browser_tab_list_factory() -> Tool:
-
+    
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
-        await context.ensure_tab()
-
-        code = ["// <internal code to list tabs>"]
-
-        result_override = ToolActionResult(
-            content=[
-                {
-                    "type": "text",
-                    "text": await context.list_tabs_markdown(),
-                }
-            ]
-        )
-
+        
+        async def action() -> ToolActionResult:
+            service = _get_tabs_service(context)
+            result = await service.list_tabs()
+            
+            if result["success"]:
+                data = result["data"]
+                
+                result_text = f"**Browser Tabs ({data['count']} total):**\n\n"
+                
+                for tab in data["tabs"]:
+                    current_marker = "→ " if tab["is_current"] else "  "
+                    result_text += f"{current_marker}**Tab {tab['index']}:** {tab['title']}\n"
+                    result_text += f"   URL: {tab['url']}\n\n"
+                
+                return ToolActionResult(
+                    content=[{
+                        "type": "text",
+                        "text": result_text
+                    }]
+                )
+            else:
+                return ToolActionResult(
+                    content=[{
+                        "type": "text",
+                        "text": f"Error listing tabs: {result['error']}"
+                    }]
+                )
+        
         return ToolResult(
-            code=code,
-            action=None,
+            code=["# List browser tabs"],
+            action=action,
             capture_snapshot=False,
             wait_for_network=False,
-            result_override=result_override,
         )
 
     schema = ToolSchema(
@@ -64,26 +85,32 @@ def browser_tab_list_factory() -> Tool:
     tool_type=ToolType.READ_ONLY,
 )
 def browser_tab_select_factory(capture_snapshot: bool) -> Tool:
-
+    
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = SelectTabInputSchema(**params)
-
-        await context.select_tab(validated_params.index)
-
-        code = [f"// <internal code to select tab {validated_params.index}>"]
-
+        
         async def action() -> ToolActionResult:
-            return ToolActionResult(
-                content=[
-                    {
+            service = _get_tabs_service(context)
+            result = await service.select_tab(validated_params.index)
+            
+            if result["success"]:
+                data = result["data"]
+                return ToolActionResult(
+                    content=[{
                         "type": "text",
-                        "text": f"Selected tab {validated_params.index}",
-                    }
-                ]
-            )
-
+                        "text": f"Selected tab {data['index']}: {data['title']}\nURL: {data['url']}"
+                    }]
+                )
+            else:
+                return ToolActionResult(
+                    content=[{
+                        "type": "text",
+                        "text": f"Failed to select tab: {result['error']}"
+                    }]
+                )
+        
         return ToolResult(
-            code=code,
+            code=[f"# Select tab {validated_params.index}"],
             action=action,
             capture_snapshot=capture_snapshot,
             wait_for_network=False,
@@ -109,34 +136,32 @@ def browser_tab_select_factory(capture_snapshot: bool) -> Tool:
     tool_type=ToolType.READ_ONLY,
 )
 def browser_tab_new_factory(capture_snapshot: bool) -> Tool:
-
+    
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = NewTabInputSchema(**params)
-
-        tab = await context.new_tab()
-
-        if validated_params.url:
-            await tab.navigate(validated_params.url)
-
-        code = ["// <internal code to open a new tab>"]
-
+        
         async def action() -> ToolActionResult:
-            url_text = (
-                f" and navigated to {validated_params.url}"
-                if validated_params.url
-                else ""
-            )
-            return ToolActionResult(
-                content=[
-                    {
+            service = _get_tabs_service(context)
+            result = await service.create_new_tab(validated_params.url)
+            
+            if result["success"]:
+                data = result["data"]
+                return ToolActionResult(
+                    content=[{
                         "type": "text",
-                        "text": f"Opened new tab{url_text}",
-                    }
-                ]
-            )
-
+                        "text": f"Created new tab: {data['title']}\nURL: {data['url']}\nTotal tabs: {data['tab_count']}"
+                    }]
+                )
+            else:
+                return ToolActionResult(
+                    content=[{
+                        "type": "text",
+                        "text": f"Failed to create new tab: {result['error']}"
+                    }]
+                )
+        
         return ToolResult(
-            code=code,
+            code=["# Open new tab"],
             action=action,
             capture_snapshot=capture_snapshot,
             wait_for_network=False,
@@ -162,26 +187,33 @@ def browser_tab_new_factory(capture_snapshot: bool) -> Tool:
     tool_type=ToolType.DESTRUCTIVE,
 )
 def browser_tab_close_factory(capture_snapshot: bool) -> Tool:
-
+    
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = CloseTabInputSchema(**params)
-
-        await context.close_tab(validated_params.index)
-
-        code = [f"// <internal code to close tab {validated_params.index}>"]
-
+        
         async def action() -> ToolActionResult:
-            return ToolActionResult(
-                content=[
-                    {
+            service = _get_tabs_service(context)
+            result = await service.close_tab(validated_params.index)
+            
+            if result["success"]:
+                data = result["data"]
+                tab_description = f"tab {data['closed_index']}" if data['closed_index'] is not None else "current tab"
+                return ToolActionResult(
+                    content=[{
                         "type": "text",
-                        "text": f"Closed tab {validated_params.index if validated_params.index else 'current'}",
-                    }
-                ]
-            )
-
+                        "text": f"Closed {tab_description}\nRemaining tabs: {data['remaining_tabs']}"
+                    }]
+                )
+            else:
+                return ToolActionResult(
+                    content=[{
+                        "type": "text",
+                        "text": f"Failed to close tab: {result['error']}"
+                    }]
+                )
+        
         return ToolResult(
-            code=code,
+            code=[f"# Close tab {validated_params.index if validated_params.index else 'current'}"],
             action=action,
             capture_snapshot=capture_snapshot,
             wait_for_network=False,
@@ -199,7 +231,6 @@ def browser_tab_close_factory(capture_snapshot: bool) -> Tool:
 
 
 def get_tab_tools(capture_snapshot: bool = True) -> list[Tool]:
-
     return [
         browser_tab_list_factory(),
         browser_tab_new_factory(capture_snapshot),

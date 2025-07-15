@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ElementReference:
-
     ref: str
     element: str
     x: int
@@ -28,7 +27,6 @@ class ElementReference:
 
 @dataclass
 class AccessibilityNode:
-
     role: str
     name: Optional[str] = None
     value: Optional[str] = None
@@ -62,7 +60,6 @@ class AccessibilityNode:
 
 
 class PageSnapshot:
-
     def __init__(self, page: "Page"):
         self.page = page
         self._accessibility_tree: Optional[AccessibilityNode] = None

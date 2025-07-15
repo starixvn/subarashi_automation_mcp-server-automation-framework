@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 import json
 from pydantic import Field, validator
-from .tool_schema import ToolInputSchema
+from core.tool_schema import ToolInputSchema
 
 
 class EmptyInputSchema(ToolInputSchema):
@@ -9,7 +9,6 @@ class EmptyInputSchema(ToolInputSchema):
 
 
 class NavigateInputSchema(ToolInputSchema):
-
     url: str = Field(description="The URL to navigate to")
 
     @validator("url")
@@ -20,24 +19,20 @@ class NavigateInputSchema(ToolInputSchema):
 
 
 class ResizeInputSchema(ToolInputSchema):
-
     width: int = Field(description="Width of the browser window", ge=100, le=3840)
     height: int = Field(description="Height of the browser window", ge=100, le=2160)
 
 
 class ElementInputSchema(ToolInputSchema):
-
     element: str = Field(description="Human-readable element description")
     ref: str = Field(description="Exact element reference from page snapshot")
 
 
 class ClickInputSchema(ElementInputSchema):
-
     pass
 
 
 class TypeInputSchema(ElementInputSchema):
-
     text: str = Field(description="Text to type into the element")
     submit: Optional[bool] = Field(
         default=False, description="Whether to submit entered text (press Enter after)"
@@ -48,22 +43,18 @@ class TypeInputSchema(ElementInputSchema):
 
 
 class HoverInputSchema(ElementInputSchema):
-
     pass
 
 
 class SelectOptionInputSchema(ElementInputSchema):
-
     values: List[str] = Field(description="Array of values to select in the dropdown")
 
 
 class GetTextInputSchema(ToolInputSchema):
-
     selector: str = Field(description="CSS selector for the element")
 
 
 class WaitForSelectorInputSchema(ToolInputSchema):
-
     selector: str = Field(description="CSS selector to wait for")
     timeout: Optional[float] = Field(
         default=10.0, description="Timeout in seconds", ge=0, le=60
@@ -71,14 +62,12 @@ class WaitForSelectorInputSchema(ToolInputSchema):
 
 
 class ScreenshotInputSchema(ToolInputSchema):
-
     full_page: Optional[bool] = Field(
         default=True, description="Take full page screenshot"
     )
 
 
 class SaveScreenshotInputSchema(ToolInputSchema):
-
     filename: str = Field(description="Filename for the screenshot")
     full_page: Optional[bool] = Field(
         default=True, description="Take full page screenshot"
@@ -92,14 +81,12 @@ class SaveScreenshotInputSchema(ToolInputSchema):
 
 
 class ScreenClickInputSchema(ToolInputSchema):
-
     element: str = Field(description="Human-readable element description")
     x: int = Field(description="X coordinate", ge=0)
     y: int = Field(description="Y coordinate", ge=0)
 
 
 class ScreenDragInputSchema(ToolInputSchema):
-
     element: str = Field(description="Human-readable element description")
     start_x: int = Field(description="Start X coordinate", ge=0)
     start_y: int = Field(description="Start Y coordinate", ge=0)
@@ -108,7 +95,6 @@ class ScreenDragInputSchema(ToolInputSchema):
 
 
 class ScreenTypeInputSchema(ToolInputSchema):
-
     text: str = Field(description="Text to type")
     submit: Optional[bool] = Field(
         default=False, description="Whether to submit entered text"
@@ -116,14 +102,12 @@ class ScreenTypeInputSchema(ToolInputSchema):
 
 
 class ScreenMoveMouseInputSchema(ToolInputSchema):
-
     element: str = Field(description="Human-readable element description")
     x: int = Field(description="X coordinate", ge=0)
     y: int = Field(description="Y coordinate", ge=0)
 
 
 class NewTabInputSchema(ToolInputSchema):
-
     url: Optional[str] = Field(
         None,
         description="The URL to navigate to in the new tab. If not provided, the new tab will be blank.",
@@ -131,12 +115,10 @@ class NewTabInputSchema(ToolInputSchema):
 
 
 class SelectTabInputSchema(ToolInputSchema):
-
     index: int = Field(..., description="The index of the tab to select")
 
 
 class CloseTabInputSchema(ToolInputSchema):
-
     index: Optional[int] = Field(
         None,
         description="The index of the tab to close. Closes current tab if not provided.",
@@ -144,7 +126,6 @@ class CloseTabInputSchema(ToolInputSchema):
 
 
 class WaitForInputSchema(ToolInputSchema):
-
     time: Optional[float] = Field(
         default=None, description="Time to wait in seconds", ge=0, le=30
     )
@@ -165,7 +146,6 @@ class WaitForInputSchema(ToolInputSchema):
 
 
 class PressKeyInputSchema(ToolInputSchema):
-
     key: str = Field(description="Name of the key to press or character to generate")
 
     @validator("key")
@@ -176,7 +156,6 @@ class PressKeyInputSchema(ToolInputSchema):
 
 
 class DragInputSchema(ToolInputSchema):
-
     start_element: str = Field(description="Human-readable source element description")
     start_ref: str = Field(
         description="Exact source element reference from page snapshot"
@@ -188,7 +167,6 @@ class DragInputSchema(ToolInputSchema):
 
 
 class UploadFileInputSchema(ToolInputSchema):
-
     file_paths: List[str] = Field(description="List of file paths to upload")
 
     @validator("file_paths")
@@ -199,7 +177,6 @@ class UploadFileInputSchema(ToolInputSchema):
 
 
 class HandleDialogInputSchema(ToolInputSchema):
-
     accept: bool = Field(description="Whether to accept or dismiss the dialog")
     prompt_text: Optional[str] = Field(
         default=None, description="Text to enter in prompt dialogs"
@@ -207,7 +184,6 @@ class HandleDialogInputSchema(ToolInputSchema):
 
 
 class DialogInputSchema(ToolInputSchema):
-
     accept: bool = Field(..., description="Whether to accept the dialog.")
     prompt_text: Optional[str] = Field(
         None, description="The text of the prompt in case of a prompt dialog."
@@ -215,7 +191,6 @@ class DialogInputSchema(ToolInputSchema):
 
 
 class SetRequestInterceptionInputSchema(ToolInputSchema):
-
     enabled: bool = Field(description="Whether to enable request interception")
     patterns: Optional[List[str]] = Field(
         default=None, description="URL patterns to intercept"
@@ -223,7 +198,6 @@ class SetRequestInterceptionInputSchema(ToolInputSchema):
 
 
 class ApiRequestInputSchema(ToolInputSchema):
-
     url: str = Field(description="API endpoint URL")
     method: str = Field(description="HTTP method (GET, POST, PUT, DELETE, PATCH)")
     headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers")
@@ -262,7 +236,6 @@ class ApiRequestInputSchema(ToolInputSchema):
 
 
 class ApiTestInputSchema(ToolInputSchema):
-
     url: str = Field(description="API endpoint URL")
     method: str = Field(description="HTTP method (GET, POST, PUT, DELETE, PATCH)")
     headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers")
@@ -307,23 +280,35 @@ class ApiTestInputSchema(ToolInputSchema):
 
 
 class DatabaseConnectInputSchema(ToolInputSchema):
-
     host: str = Field(description="SQL Server host")
-    port: Optional[int] = Field(default=None, description="SQL Server port (default: 1433)")
+    port: Optional[int] = Field(
+        default=None, description="SQL Server port (default: 1433)"
+    )
     database: str = Field(description="Database name")
-    username: Optional[str] = Field(default=None, description="Username (optional, uses default if not provided)")
-    password: Optional[str] = Field(default=None, description="Password (optional, uses default if not provided)")
+    username: Optional[str] = Field(
+        default=None, description="Username (optional, uses default if not provided)"
+    )
+    password: Optional[str] = Field(
+        default=None, description="Password (optional, uses default if not provided)"
+    )
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
     )
-    packet_size: Optional[int] = Field(default=None, description="SQL Server packet size")
-    trust_server_certificate: Optional[bool] = Field(default=None, description="Trust server certificate")
-    integrated_security: Optional[bool] = Field(default=None, description="Use integrated security")
-    connection_timeout: Optional[int] = Field(default=None, description="Connection timeout in seconds")
+    packet_size: Optional[int] = Field(
+        default=None, description="SQL Server packet size"
+    )
+    trust_server_certificate: Optional[bool] = Field(
+        default=None, description="Trust server certificate"
+    )
+    integrated_security: Optional[bool] = Field(
+        default=None, description="Use integrated security"
+    )
+    connection_timeout: Optional[int] = Field(
+        default=None, description="Connection timeout in seconds"
+    )
 
 
 class DatabaseQueryInputSchema(ToolInputSchema):
-
     query: str = Field(description="SQL query to execute")
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
@@ -332,7 +317,6 @@ class DatabaseQueryInputSchema(ToolInputSchema):
 
 
 class DatabaseExecuteInputSchema(ToolInputSchema):
-
     query: str = Field(description="SQL statement to execute (INSERT/UPDATE/DELETE)")
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
@@ -341,7 +325,6 @@ class DatabaseExecuteInputSchema(ToolInputSchema):
 
 
 class DatabaseListTablesInputSchema(ToolInputSchema):
-
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
     )
@@ -351,7 +334,6 @@ class DatabaseListTablesInputSchema(ToolInputSchema):
 
 
 class DatabaseDescribeTableInputSchema(ToolInputSchema):
-
     table_name: str = Field(description="Table name to describe")
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
@@ -360,7 +342,6 @@ class DatabaseDescribeTableInputSchema(ToolInputSchema):
 
 
 class DatabaseCloseInputSchema(ToolInputSchema):
-
     connection_name: Optional[str] = Field(
         default="default", description="Connection identifier"
     )
@@ -368,15 +349,33 @@ class DatabaseCloseInputSchema(ToolInputSchema):
 
 class GetPageHtmlInputSchema(ToolInputSchema):
     """Input schema for getting complete page HTML optimized for element mapping"""
-    format_html: bool = Field(default=True, description="Format HTML with line breaks for readability")
-    max_length: int = Field(default=150000, description="Maximum HTML length before truncation", ge=10000, le=500000)
+
+    format_html: bool = Field(
+        default=True, description="Format HTML with line breaks for readability"
+    )
+    max_length: int = Field(
+        default=150000,
+        description="Maximum HTML length before truncation",
+        ge=10000,
+        le=500000,
+    )
 
 
 class GetPageContentInputSchema(ToolInputSchema):
     """Input schema for getting page content with options"""
-    include_meta: bool = Field(default=False, description="Include meta tags in the output")
-    include_links: bool = Field(default=False, description="Include links in the output")
-    include_images: bool = Field(default=False, description="Include images in the output")
-    max_length: int = Field(default=50000, description="Maximum length of text content", ge=1000, le=200000)
+
+    include_meta: bool = Field(
+        default=False, description="Include meta tags in the output"
+    )
+    include_links: bool = Field(
+        default=False, description="Include links in the output"
+    )
+    include_images: bool = Field(
+        default=False, description="Include images in the output"
+    )
+    max_length: int = Field(
+        default=50000, description="Maximum length of text content", ge=1000, le=200000
+    )
+
 
 # Add new schemas here

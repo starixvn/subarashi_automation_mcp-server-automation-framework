@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -8,10 +8,11 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import SaveScreenshotInputSchema
+from core.schemas import SaveScreenshotInputSchema
+from services.pdf_service import PdfService
 
 if TYPE_CHECKING:
-    from ..context import ServerContext
+    from context import ServerContext
 
 
 @define_tool_factory(
@@ -25,52 +26,28 @@ if TYPE_CHECKING:
 def browser_save_pdf_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = SaveScreenshotInputSchema(**params)
-        
-        tab = context.current_tab_or_die()
-        
-        filename = validated_params.filename
-        if not filename.endswith('.pdf'):
-            filename += '.pdf'
-        
+
+        service = PdfService(context)
+
         code = [
-            f"// Save page as PDF: {filename}",
-            f"await page.pdf({{ path: '{filename}', format: 'A4' }});",
+            f"# Save current page as PDF",
+            f"# Filename: {validated_params.filename}",
+            f"# Full page: {validated_params.full_page}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                output_path = context.settings.output_dir / filename
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                
-                await tab.page.pdf(
-                    path=str(output_path),
-                    format="A4",
-                    print_background=True,
-                    margin={
-                        "top": "1cm",
-                        "right": "1cm", 
-                        "bottom": "1cm",
-                        "left": "1cm"
+            result = await service.save_as_pdf(
+                validated_params.filename, validated_params.full_page
+            )
+
+            return ToolActionResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": result.message,
                     }
-                )
-                
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"PDF saved to {output_path}",
-                        }
-                    ]
-                )
-            except Exception as e:
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Failed to save PDF: {str(e)}",
-                        }
-                    ]
-                )
+                ]
+            )
 
         return ToolResult(
             code=code,
@@ -93,6 +70,7 @@ def browser_save_pdf_factory(capture_snapshot: bool) -> Tool:
 def get_pdf_tools(capture_snapshot: bool = True) -> list[Tool]:
     return [
         browser_save_pdf_factory(capture_snapshot),
-    ] 
+    ]
+
 
 PDF_TOOLS = get_pdf_tools()

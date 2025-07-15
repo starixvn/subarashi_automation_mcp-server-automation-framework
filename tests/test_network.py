@@ -9,392 +9,553 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tests.conftest import assert_text_content, assert_contains_text_content
 from context import ServerContext
 from config.settings import Config, get_default_config, config_to_settings
+from tools.network import get_network_tools
+from services.network_service import NetworkService
+from services.base_service import ServiceResult
 
 
 @pytest.mark.asyncio
 async def test_browser_network_requests():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test network request monitoring
+    network_tools = get_network_tools(capture_snapshot=False)
+    network_requests_tool = next(
+        tool for tool in network_tools if tool.schema.name == "browser_network_requests"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
+    # Mock service result with network requests
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Retrieved 4 network requests",
+        data={
+            "requests": [
                 {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Get network requests
-const requests = await page.getNetworkRequests();
-```
+                    "url": "https://example.com/",
+                    "method": "GET",
+                    "status": 200,
+                    "size": 1024,
+                },
+                {
+                    "url": "https://example.com/style.css",
+                    "method": "GET",
+                    "status": 200,
+                    "size": 2048,
+                },
+                {
+                    "url": "https://example.com/script.js",
+                    "method": "GET",
+                    "status": 200,
+                    "size": 4096,
+                },
+                {
+                    "url": "https://api.example.com/data",
+                    "method": "POST",
+                    "status": 201,
+                    "size": 512,
+                },
+            ],
+            "count": 4,
+        },
+    )
 
-Network Requests:
-1. GET https://example.com/ - Status: 200, Size: 1024 bytes
-2. GET https://example.com/style.css - Status: 200, Size: 2048 bytes
-3. GET https://example.com/script.js - Status: 200, Size: 4096 bytes
-4. POST https://api.example.com/data - Status: 201, Size: 512 bytes
-""",
-                }
-            ]
+    # Create mock context
+    mock_context = MagicMock()
 
-            result = await registry.execute_tool("browser_network_requests", {})
+    with patch.object(
+        NetworkService, "get_network_requests", return_value=mock_service_result
+    ):
+        result = await network_requests_tool.handle(mock_context, {})
 
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
+        # Test ToolResult structure
+        assert result.code == [
+            "# Get network requests from current tab",
+            "# Returns list of HTTP requests made by the page",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            assert "Get network requests" in text_content
-            assert "Network Requests:" in text_content
-            assert "GET https://example.com/" in text_content
-            assert "Status: 200" in text_content
-            assert "POST https://api.example.com/data" in text_content
-            assert "Status: 201" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        content_text = action_result.content[0]["text"]
+        assert "### Network Requests" in content_text
+        assert "**GET** https://example.com/" in content_text
+        assert "**POST** https://api.example.com/data" in content_text
 
 
 @pytest.mark.asyncio
 async def test_browser_network_requests_empty():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test network request monitoring with no requests
+    network_tools = get_network_tools(capture_snapshot=False)
+    network_requests_tool = next(
+        tool for tool in network_tools if tool.schema.name == "browser_network_requests"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result with no requests
+    mock_service_result = ServiceResult(
+        success=True,
+        message="No network requests found",
+        data={"requests": [], "count": 0},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Get network requests
-const requests = await page.getNetworkRequests();
-```
+    with patch.object(
+        NetworkService, "get_network_requests", return_value=mock_service_result
+    ):
+        result = await network_requests_tool.handle(mock_context, {})
 
-Network Requests:
-No network requests found.
-""",
-                }
-            ]
-
-            result = await registry.execute_tool("browser_network_requests", {})
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Get network requests" in text_content
-            assert "No network requests found" in text_content
+        # Test action execution for empty requests
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "No network requests" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_browser_set_request_interception_enable():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test enabling request interception
+    network_tools = get_network_tools(capture_snapshot=False)
+    set_interception_tool = next(
+        tool
+        for tool in network_tools
+        if tool.schema.name == "browser_set_request_interception"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Request interception enabled successfully",
+        data={"enabled": True, "patterns": ["**/*"], "intercepted_count": 0},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Enable request interception
-await page.route('**/*', route => {
-  console.log('Request intercepted:', route.request().url());
-  route.continue();
-});
-```
+    with patch.object(
+        NetworkService, "set_request_interception", return_value=mock_service_result
+    ):
+        result = await set_interception_tool.handle(mock_context, {"enabled": True})
 
-Request interception enabled successfully.
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == ["# Set request interception", "# Enabled: True"]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_set_request_interception", {"enabled": True}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Enable request interception" in text_content
-            assert "Request interception enabled successfully" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Request interception enabled successfully"
+            in action_result.content[0]["text"]
+        )
 
 
 @pytest.mark.asyncio
 async def test_browser_set_request_interception_disable():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test disabling request interception
+    network_tools = get_network_tools(capture_snapshot=False)
+    set_interception_tool = next(
+        tool
+        for tool in network_tools
+        if tool.schema.name == "browser_set_request_interception"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Request interception disabled successfully",
+        data={"enabled": False, "patterns": [], "intercepted_count": 15},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Disable request interception
-await page.unroute('**/*');
-```
+    with patch.object(
+        NetworkService, "set_request_interception", return_value=mock_service_result
+    ):
+        result = await set_interception_tool.handle(mock_context, {"enabled": False})
 
-Request interception disabled successfully.
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == ["# Set request interception", "# Enabled: False"]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_set_request_interception", {"enabled": False}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Disable request interception" in text_content
-            assert "Request interception disabled successfully" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Request interception disabled successfully"
+            in action_result.content[0]["text"]
+        )
 
 
 @pytest.mark.asyncio
 async def test_browser_set_request_interception_with_patterns():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test request interception with specific patterns
+    network_tools = get_network_tools(capture_snapshot=False)
+    set_interception_tool = next(
+        tool
+        for tool in network_tools
+        if tool.schema.name == "browser_set_request_interception"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Request interception enabled for patterns: **/api/**, **/*.css",
+        data={
+            "enabled": True,
+            "patterns": ["**/api/**", "**/*.css"],
+            "intercepted_count": 0,
+        },
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Enable request interception with patterns
-await page.route('**/api/**', route => {
-  console.log('API request intercepted:', route.request().url());
-  route.continue();
-});
-await page.route('**/*.css', route => {
-  console.log('CSS request intercepted:', route.request().url());
-  route.continue();
-});
-```
+    with patch.object(
+        NetworkService, "set_request_interception", return_value=mock_service_result
+    ):
+        result = await set_interception_tool.handle(
+            mock_context, {"enabled": True, "patterns": ["**/api/**", "**/*.css"]}
+        )
 
-Request interception enabled for patterns: **/api/**, **/*.css
-""",
-                }
-            ]
-
-            result = await registry.execute_tool(
-                "browser_set_request_interception",
-                {"enabled": True, "patterns": ["**/api/**", "**/*.css"]},
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Enable request interception with patterns" in text_content
-            assert "**/api/**" in text_content
-            assert "**/*.css" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Request interception enabled for patterns: **/api/**, **/*.css"
+            in action_result.content[0]["text"]
+        )
 
 
 @pytest.mark.asyncio
 async def test_browser_network_requests_with_filters():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test network request monitoring with filters
+    network_tools = get_network_tools(capture_snapshot=False)
+    network_requests_tool = next(
+        tool for tool in network_tools if tool.schema.name == "browser_network_requests"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
+    # Mock service result with filtered requests
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Retrieved 2 POST requests",
+        data={
+            "requests": [
                 {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Get network requests with filters
-const requests = await page.getNetworkRequests({ method: 'POST', status: 200 });
-```
+                    "url": "https://api.example.com/login",
+                    "method": "POST",
+                    "status": 200,
+                    "size": 256,
+                },
+                {
+                    "url": "https://api.example.com/data",
+                    "method": "POST",
+                    "status": 200,
+                    "size": 1024,
+                },
+            ],
+            "count": 2,
+            "filter": {"method": "POST", "status": 200},
+        },
+    )
 
-Network Requests (Filtered):
-1. POST https://api.example.com/login - Status: 200, Size: 256 bytes
-2. POST https://api.example.com/data - Status: 200, Size: 1024 bytes
-""",
-                }
-            ]
+    # Create mock context
+    mock_context = MagicMock()
 
-            result = await registry.execute_tool(
-                "browser_network_requests", {"method": "POST", "status": 200}
-            )
+    with patch.object(
+        NetworkService, "get_network_requests", return_value=mock_service_result
+    ):
+        result = await network_requests_tool.handle(
+            mock_context, {"method": "POST", "status": 200}
+        )
 
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Get network requests with filters" in text_content
-            assert "Network Requests (Filtered)" in text_content
-            assert "POST https://api.example.com/login" in text_content
-            assert "Status: 200" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_network_requests_error_handling():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.side_effect = Exception("Network monitoring not enabled")
-
-            with pytest.raises(Exception, match="Network monitoring not enabled"):
-                await registry.execute_tool("browser_network_requests", {})
+        # Test action execution with filters
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        content_text = action_result.content[0]["text"]
+        assert "### Network Requests" in content_text
+        assert "**POST** https://api.example.com/login" in content_text
+        assert "**POST** https://api.example.com/data" in content_text
 
 
 @pytest.mark.asyncio
 async def test_browser_network_requests_with_headers():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test network request monitoring with headers
+    network_tools = get_network_tools(capture_snapshot=False)
+    network_requests_tool = next(
+        tool for tool in network_tools if tool.schema.name == "browser_network_requests"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
+    # Mock service result with headers
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Retrieved network requests with headers",
+        data={
+            "requests": [
                 {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Get network requests with headers
-const requests = await page.getNetworkRequests({ includeHeaders: true });
-```
+                    "url": "https://example.com/",
+                    "method": "GET",
+                    "status": 200,
+                    "size": 1024,
+                    "headers": {
+                        "User-Agent": "Mozilla/5.0...",
+                        "Accept": "text/html,application/xhtml+xml",
+                    },
+                },
+                {
+                    "url": "https://api.example.com/data",
+                    "method": "POST",
+                    "status": 201,
+                    "size": 512,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer token123",
+                    },
+                },
+            ],
+            "count": 2,
+            "include_headers": True,
+        },
+    )
 
-Network Requests (With Headers):
-1. GET https://example.com/
-   Headers: {
-     "User-Agent": "Mozilla/5.0...",
-     "Accept": "text/html,application/xhtml+xml",
-     "Accept-Language": "en-US,en;q=0.9"
-   }
-   Status: 200, Size: 1024 bytes
+    # Create mock context
+    mock_context = MagicMock()
 
-2. POST https://api.example.com/data
-   Headers: {
-     "Content-Type": "application/json",
-     "Authorization": "Bearer token123"
-   }
-   Status: 201, Size: 512 bytes
-""",
-                }
-            ]
+    with patch.object(
+        NetworkService, "get_network_requests", return_value=mock_service_result
+    ):
+        result = await network_requests_tool.handle(
+            mock_context, {"include_headers": True}
+        )
 
-            result = await registry.execute_tool(
-                "browser_network_requests", {"include_headers": True}
-            )
+        # Test action execution with headers
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        content_text = action_result.content[0]["text"]
+        assert "### Network Requests" in content_text
+        assert "**GET** https://example.com/" in content_text
+        assert "**POST** https://api.example.com/data" in content_text
 
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
 
-            assert "Get network requests with headers" in text_content
-            assert "Network Requests (With Headers)" in text_content
-            assert "User-Agent" in text_content
-            assert "Content-Type" in text_content
-            assert "Authorization" in text_content
+@pytest.mark.asyncio
+async def test_browser_network_requests_error_handling():
+    # Test error handling in network requests
+    network_tools = get_network_tools(capture_snapshot=False)
+    network_requests_tool = next(
+        tool for tool in network_tools if tool.schema.name == "browser_network_requests"
+    )
+
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Network monitoring not enabled",
+        error="Network monitoring not enabled",
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        NetworkService, "get_network_requests", return_value=mock_service_result
+    ):
+        result = await network_requests_tool.handle(mock_context, {})
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Network monitoring not enabled" in action_result.content[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_browser_set_request_interception_error():
+    # Test error handling in request interception
+    network_tools = get_network_tools(capture_snapshot=False)
+    set_interception_tool = next(
+        tool
+        for tool in network_tools
+        if tool.schema.name == "browser_set_request_interception"
+    )
+
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Failed to set request interception",
+        error="Browser context not available",
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        NetworkService, "set_request_interception", return_value=mock_service_result
+    ):
+        result = await set_interception_tool.handle(mock_context, {"enabled": True})
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Failed to set request interception" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_network_capability_filtering():
-    config = Config(
-        browser=get_default_config().browser,
-        server=get_default_config().server,
-        network=get_default_config().network,
-        capabilities=["core", "network"],
+    # Test that network tools have proper capability filtering
+    network_tools = get_network_tools(capture_snapshot=False)
+
+    # Check that we have the expected network tools
+    tool_names = [tool.schema.name for tool in network_tools]
+    expected_tools = ["browser_network_requests", "browser_set_request_interception"]
+
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing network tool: {expected_tool}"
+
+    # Check that all tools have NETWORK capability
+    from core.tool_schema import ToolCapability
+
+    for tool in network_tools:
+        assert tool.capability == ToolCapability.NETWORK
+
+
+@pytest.mark.asyncio
+async def test_network_tools_capture_snapshot_parameter():
+    # Test that network tools respect capture_snapshot parameter
+    tools_with_snapshot = get_network_tools(capture_snapshot=True)
+    tools_without_snapshot = get_network_tools(capture_snapshot=False)
+
+    # Find network requests tool in both sets
+    requests_with_snapshot = next(
+        tool
+        for tool in tools_with_snapshot
+        if tool.schema.name == "browser_network_requests"
     )
-    settings = config_to_settings(config)
+    requests_without_snapshot = next(
+        tool
+        for tool in tools_without_snapshot
+        if tool.schema.name == "browser_network_requests"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Create mock context and service result
+    mock_context = MagicMock()
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Retrieved network requests",
+        data={"requests": [], "count": 0},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    with patch.object(
+        NetworkService, "get_network_requests", return_value=mock_service_result
+    ):
+        result_with_snapshot = await requests_with_snapshot.handle(mock_context, {})
+        result_without_snapshot = await requests_without_snapshot.handle(
+            mock_context, {}
+        )
 
-        tools = await registry.list_tools()
-        tool_names = {tool["name"] for tool in tools}
+        assert result_with_snapshot.capture_snapshot is True
+        assert result_without_snapshot.capture_snapshot is False
 
-        assert "browser_network_requests" in tool_names
-        assert "browser_set_request_interception" in tool_names 
+
+@pytest.mark.asyncio
+async def test_network_tools_schema_validation():
+    # Test that network tools have proper schema validation
+    network_tools = get_network_tools(capture_snapshot=False)
+
+    for tool in network_tools:
+        assert tool.schema.name is not None
+        assert tool.schema.title is not None
+        assert tool.schema.description is not None
+        assert tool.schema.input_schema is not None
+        assert tool.schema.tool_type is not None
+        assert tool.handle is not None
+        assert tool.capability is not None
+
+        # Test that tools have proper type
+        from core.tool_schema import ToolType
+
+        if tool.schema.name == "browser_network_requests":
+            assert tool.schema.tool_type == ToolType.READ_ONLY
+        elif tool.schema.name == "browser_set_request_interception":
+            assert tool.schema.tool_type == ToolType.DESTRUCTIVE
+
+
+@pytest.mark.asyncio
+async def test_network_tools_network_settings():
+    # Test that network tools have proper network settings
+    network_tools = get_network_tools(capture_snapshot=False)
+
+    for tool in network_tools:
+        mock_context = MagicMock()
+        mock_service_result = ServiceResult(
+            success=True, message="Operation successful", data={}
+        )
+
+        with patch.object(
+            NetworkService, "get_network_requests", return_value=mock_service_result
+        ):
+            with patch.object(
+                NetworkService,
+                "set_request_interception",
+                return_value=mock_service_result,
+            ):
+                if tool.schema.name == "browser_network_requests":
+                    result = await tool.handle(mock_context, {})
+                else:
+                    result = await tool.handle(mock_context, {"enabled": True})
+
+                # Network operations shouldn't wait for network
+                assert result.wait_for_network is False
+
+
+@pytest.mark.asyncio
+async def test_network_request_performance_metrics():
+    # Test network request performance metrics
+    network_tools = get_network_tools(capture_snapshot=False)
+    network_requests_tool = next(
+        tool for tool in network_tools if tool.schema.name == "browser_network_requests"
+    )
+
+    # Mock service result with performance metrics
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Retrieved network requests with performance metrics",
+        data={
+            "requests": [
+                {
+                    "url": "https://example.com/",
+                    "method": "GET",
+                    "status": 200,
+                    "size": 1024,
+                    "timing": {
+                        "dns": 50,
+                        "connect": 100,
+                        "request": 200,
+                        "response": 300,
+                        "total": 650,
+                    },
+                }
+            ],
+            "count": 1,
+            "include_performance": True,
+        },
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        NetworkService, "get_network_requests", return_value=mock_service_result
+    ):
+        result = await network_requests_tool.handle(
+            mock_context, {"include_performance": True}
+        )
+
+        # Test action execution with performance metrics
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        content_text = action_result.content[0]["text"]
+        assert "### Network Requests" in content_text
+        assert "**GET** https://example.com/" in content_text

@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -8,7 +8,7 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import (
+from core.schemas import (
     ScreenshotInputSchema,
     SaveScreenshotInputSchema,
     ScreenClickInputSchema,
@@ -17,9 +17,10 @@ from .schemas import (
     ScreenMoveMouseInputSchema,
     EmptyInputSchema,
 )
+from services.vision_service import VisionService
 
 if TYPE_CHECKING:
-    from ..context import ServerContext
+    from context import ServerContext
 
 
 @define_tool_factory(
@@ -31,29 +32,32 @@ if TYPE_CHECKING:
     tool_type=ToolType.READ_ONLY,
 )
 def browser_screenshot_factory(capture_snapshot: bool) -> Tool:
-
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = ScreenshotInputSchema(**params)
 
-        tab = context.current_tab_or_die()
+        service = VisionService(context)
 
         code = [
-            f"// Take screenshot (full_page={validated_params.full_page})",
-            f"await page.screenshot({{ fullPage: {str(validated_params.full_page).lower()} }});",
+            f"# Take screenshot of current page",
+            f"# Full page: {validated_params.full_page}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                snapshot = await tab.capture_snapshot(include_screenshot=True)
+            result = await service.take_screenshot(validated_params.full_page)
 
-                content = [
-                    {"type": "text", "text": f"Screenshot taken of {snapshot.url()}"}
-                ]
+            if result.success:
+                content = [{"type": "text", "text": result.message}]
 
-                if context.client_supports_images() and snapshot.has_screenshot():
+                # Add screenshot to content if available and client supports images
+                if (
+                    context.client_supports_images()
+                    and result.data
+                    and result.data.get("has_screenshot")
+                    and result.data.get("content")
+                ):
                     import base64
 
-                    screenshot_data = snapshot.get_screenshot_data()
+                    screenshot_data = result.data["content"][0]["data"]
                     if screenshot_data:
                         content.append(
                             {
@@ -64,12 +68,9 @@ def browser_screenshot_factory(capture_snapshot: bool) -> Tool:
                         )
 
                 return ToolActionResult(content=content)
-
-            except Exception as e:
+            else:
                 return ToolActionResult(
-                    content=[
-                        {"type": "text", "text": f"Failed to take screenshot: {str(e)}"}
-                    ]
+                    content=[{"type": "text", "text": result.message}]
                 )
 
         return ToolResult(
@@ -99,49 +100,30 @@ def browser_screenshot_factory(capture_snapshot: bool) -> Tool:
     tool_type=ToolType.READ_ONLY,
 )
 def browser_save_screenshot_factory(capture_snapshot: bool) -> Tool:
-
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = SaveScreenshotInputSchema(**params)
 
-        tab = context.current_tab_or_die()
+        service = VisionService(context)
 
         code = [
-            f"// Save screenshot to {validated_params.filename}",
-            f"await page.screenshot({{ path: '{validated_params.filename}', fullPage: {str(validated_params.full_page).lower()} }});",
+            f"# Save screenshot to file",
+            f"# Filename: {validated_params.filename}",
+            f"# Full page: {validated_params.full_page}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                snapshot = await tab.capture_snapshot(include_screenshot=True)
+            result = await service.save_screenshot(
+                validated_params.filename, validated_params.full_page
+            )
 
-                output_path = context.settings.output_dir / validated_params.filename
-                success = await snapshot.save_screenshot(output_path)
-
-                if success:
-                    return ToolActionResult(
-                        content=[
-                            {
-                                "type": "text",
-                                "text": f"Screenshot saved to {output_path}",
-                            }
-                        ]
-                    )
-                else:
-                    return ToolActionResult(
-                        content=[
-                            {
-                                "type": "text",
-                                "text": f"Failed to save screenshot to {output_path}",
-                            }
-                        ]
-                    )
-
-            except Exception as e:
-                return ToolActionResult(
-                    content=[
-                        {"type": "text", "text": f"Failed to save screenshot: {str(e)}"}
-                    ]
-                )
+            return ToolActionResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": result.message,
+                    }
+                ]
+            )
 
         return ToolResult(
             code=code,
@@ -170,39 +152,30 @@ def browser_save_screenshot_factory(capture_snapshot: bool) -> Tool:
     tool_type=ToolType.DESTRUCTIVE,
 )
 def browser_screen_click_factory(capture_snapshot: bool) -> Tool:
-
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = ScreenClickInputSchema(**params)
 
-        tab = context.current_tab_or_die()
+        service = VisionService(context)
 
         code = [
-            f"// Click at coordinates ({validated_params.x}, {validated_params.y}) - {validated_params.element}",
-            f"await page.mouse.click({validated_params.x}, {validated_params.y});",
+            f"# Click at screen coordinates",
+            f"# Position: ({validated_params.x}, {validated_params.y})",
+            f"# Element: {validated_params.element}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                await tab.page.mouse.click(validated_params.x, validated_params.y)
+            result = await service.screen_click(
+                validated_params.x, validated_params.y, validated_params.element
+            )
 
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Clicked at coordinates ({validated_params.x}, {validated_params.y}) - {validated_params.element}",
-                        }
-                    ]
-                )
-
-            except Exception as e:
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Failed to click at coordinates: {str(e)}",
-                        }
-                    ]
-                )
+            return ToolActionResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": result.message,
+                    }
+                ]
+            )
 
         return ToolResult(
             code=code,
@@ -231,31 +204,27 @@ def browser_screen_click_factory(capture_snapshot: bool) -> Tool:
     tool_type=ToolType.READ_ONLY,
 )
 def browser_capture_snapshot_factory(capture_snapshot: bool) -> Tool:
-
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
-        tab = context.current_tab_or_die()
+        service = VisionService(context)
 
         code = [
-            "// Capture page snapshot with accessibility tree",
-            "const snapshot = await page.accessibility.snapshot({ interestingOnly: true });",
+            "# Capture page snapshot",
+            "# Includes accessibility tree and page content",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                snapshot = await tab.capture_snapshot(
-                    include_screenshot=capture_snapshot
-                )
+            result = await service.capture_snapshot(include_screenshot=capture_snapshot)
 
+            if result.success:
                 return ToolActionResult(
-                    content=[{"type": "text", "text": snapshot.text()}]
+                    content=[{"type": "text", "text": result.data.get("text", "")}]
                 )
-
-            except Exception as e:
+            else:
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": f"Failed to capture snapshot: {str(e)}",
+                            "text": result.message,
                         }
                     ]
                 )

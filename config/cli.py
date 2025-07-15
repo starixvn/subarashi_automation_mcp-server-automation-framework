@@ -11,7 +11,7 @@ from .settings import (
     sanitize_for_file_path,
 )
 
-from tools.tool_schema import ToolCapability
+from core.tool_schema import ToolCapability
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +256,7 @@ def parse_enhanced_args(args: Optional[List[str]] = None) -> CLIOptions:
 
     cli_options.transport = parsed_args.transport  # type: ignore
     cli_options.list_capabilities = parsed_args.list_capabilities  # type: ignore
-    if not cli_options.storage_state and cli_options.transport == 'stdio':
+    if not cli_options.storage_state and cli_options.transport == "stdio":
         cli_options.storage_state = "config/keys/storage_state.json"
 
     return cli_options

@@ -1,440 +1,234 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
+import sys
+from pathlib import Path
+
+# Add the parent directory to the path so we can import from the main package
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tests.conftest import assert_text_content, assert_contains_text_content
-from tools.registry import EnhancedToolRegistry
 from context import ServerContext
+from config.settings import Config, get_default_config, config_to_settings
+from tools.core import get_core_tools
+from services.core_service import CoreService
+from services.base_service import ServiceResult
 
 
 @pytest.mark.asyncio
-async def test_browser_navigate(tool_registry: EnhancedToolRegistry, server):
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": f"""
-- Ran Playwright code:
-```js
-// Navigate to {server.HELLO_WORLD}
-await page.goto('{server.HELLO_WORLD}');
-```
-
-- Page URL: {server.HELLO_WORLD}
-- Page Title: Title
-- Page Snapshot
-```yaml
-- generic [ref=e1]: Hello, world!
-```
-""",
-            }
-        ]
-
-        result = await tool_registry.execute_tool(
-            "browser_navigate", {"url": server.HELLO_WORLD}
-        )
-
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
-
-        assert f"Navigate to {server.HELLO_WORLD}" in text_content
-        assert "Page URL:" in text_content
-        assert "Page Title: Title" in text_content
-        assert "Page Snapshot" in text_content
-        assert "- generic [ref=e1]: Hello, world!" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_click(tool_registry: EnhancedToolRegistry, server):
-    server.set_content(
-        "/",
-        """
-        <title>Title</title>
-        <button>Submit</button>
-    """,
-        "text/html",
+async def test_browser_navigate():
+    # Test navigation functionality
+    core_tools = get_core_tools(capture_snapshot=False)
+    navigate_tool = next(
+        tool for tool in core_tools if tool.schema.name == "browser_navigate"
     )
 
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": f"""
-- Ran Playwright code:
-```js
-// Click Submit button
-await page.getByRole('button', {{ name: 'Submit' }}).click();
-```
+    # Mock service result
+    mock_service_result = {
+        "success": True,
+        "data": {"url": "https://example.com"},
+        "message": "Navigated to https://example.com",
+    }
 
-- Page URL: {server.PREFIX}
-- Page Title: Title
-- Page Snapshot
-```yaml
-- button "Submit" [ref=e2]
-```
-""",
-            }
-        ]
+    # Create mock context
+    mock_context = MagicMock()
 
-        result = await tool_registry.execute_tool(
-            "browser_click", {"element": "Submit button", "ref": "e2"}
+    with patch.object(CoreService, "navigate_to_url", return_value=mock_service_result):
+        result = await navigate_tool.handle(
+            mock_context, {"url": "https://example.com"}
         )
 
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
+        # Test ToolResult structure
+        assert result.code == ["# Navigate to https://example.com"]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-        assert "Click Submit button" in text_content
-        assert "Page URL:" in text_content
-        assert "Page Title: Title" in text_content
-        assert '- button "Submit" [ref=e2]' in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Successfully navigated to https://example.com"
+            in action_result.content[0]["text"]
+        )
 
 
 @pytest.mark.asyncio
-async def test_browser_type(tool_registry: EnhancedToolRegistry, server):
-    server.set_content(
-        "/",
-        """
-        <!DOCTYPE html>
-        <html>
-          <input type='text' onkeypress="console.log('Key pressed:', event.key, ', Text:', event.target.value)"></input>
-        </html>
-    """,
-        "text/html",
+async def test_browser_close():
+    # Test browser closing functionality
+    core_tools = get_core_tools(capture_snapshot=False)
+    close_tool = next(
+        tool for tool in core_tools if tool.schema.name == "browser_close"
     )
 
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": f"""
-- Ran Playwright code:
-```js
-// Type Hi! in textbox
-await page.getByRole('textbox').type('Hi!');
-await page.getByRole('textbox').press('Enter');
-```
+    # Mock service result
+    mock_service_result = {"success": True, "message": "Browser closed successfully"}
 
-- Page URL: {server.PREFIX}
-- Page Title: 
-- Page Snapshot
-```yaml
-- textbox [ref=e2]
-```
-""",
-            }
-        ]
+    # Create mock context
+    mock_context = MagicMock()
 
-        result = await tool_registry.execute_tool(
-            "browser_type",
-            {"element": "textbox", "ref": "e2", "text": "Hi!", "submit": True},
-        )
+    with patch.object(CoreService, "close_browser", return_value=mock_service_result):
+        result = await close_tool.handle(mock_context, {})
 
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
+        # Test ToolResult structure
+        assert result.code == ["# Close browser"]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-        assert "Type Hi!" in text_content
-        assert "Hi!" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Browser closed successfully" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_select_option(tool_registry: EnhancedToolRegistry, server):
-    server.set_content(
-        "/",
-        """
-        <title>Title</title>
-        <select>
-          <option value="foo">Foo</option>
-          <option value="bar">Bar</option>
-        </select>
-    """,
-        "text/html",
+async def test_browser_resize():
+    # Test browser resizing functionality
+    core_tools = get_core_tools(capture_snapshot=False)
+    resize_tool = next(
+        tool for tool in core_tools if tool.schema.name == "browser_resize"
     )
 
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": f"""
-- Ran Playwright code:
-```js
-// Select options [bar] in Select
-await page.getByRole('combobox').selectOption(['bar']);
-```
+    # Mock service result
+    mock_service_result = {
+        "success": True,
+        "data": {"width": 1920, "height": 1080},
+        "message": "Browser resized to 1920x1080",
+    }
 
-- Page URL: {server.PREFIX}
-- Page Title: Title
-- Page Snapshot
-```yaml
-- combobox [ref=e2]:
-  - option "Foo"
-  - option "Bar" [selected]
-```
-""",
-            }
-        ]
+    # Create mock context
+    mock_context = MagicMock()
 
-        result = await tool_registry.execute_tool(
-            "browser_select_option",
-            {"element": "Select", "ref": "e2", "values": ["bar"]},
-        )
+    with patch.object(CoreService, "resize_browser", return_value=mock_service_result):
+        result = await resize_tool.handle(mock_context, {"width": 1920, "height": 1080})
 
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
+        # Test ToolResult structure
+        assert result.code == ["# Resize browser to 1920x1080"]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is True
+        assert result.action is not None
 
-        assert "Select options [bar]" in text_content
-        assert "Page Title: Title" in text_content
-        assert 'option "Bar" [selected]' in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Browser resized to 1920x1080" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_select_option_multiple(
-    tool_registry: EnhancedToolRegistry, server
-):
-    server.set_content(
-        "/",
-        """
-        <title>Title</title>
-        <select multiple>
-          <option value="foo">Foo</option>
-          <option value="bar">Bar</option>
-          <option value="baz">Baz</option>
-        </select>
-    """,
-        "text/html",
+async def test_browser_navigate_error_handling():
+    # Test error handling in navigation
+    core_tools = get_core_tools(capture_snapshot=False)
+    navigate_tool = next(
+        tool for tool in core_tools if tool.schema.name == "browser_navigate"
     )
 
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": f"""
-- Ran Playwright code:
-```js
-// Select options [bar, baz] in Select
-await page.getByRole('listbox').selectOption(['bar', 'baz']);
-```
+    # Mock service error result
+    mock_service_result = {"success": False, "error": "Invalid URL format"}
 
-- Page URL: {server.PREFIX}
-- Page Title: Title
-- Page Snapshot
-```yaml
-- listbox [ref=e2]:
-  - option "Foo" [ref=e3]
-  - option "Bar" [selected] [ref=e4]
-  - option "Baz" [selected] [ref=e5]
-```
-""",
-            }
-        ]
+    # Create mock context
+    mock_context = MagicMock()
 
-        result = await tool_registry.execute_tool(
-            "browser_select_option",
-            {"element": "Select", "ref": "e2", "values": ["bar", "baz"]},
+    with patch.object(CoreService, "navigate_to_url", return_value=mock_service_result):
+        result = await navigate_tool.handle(mock_context, {"url": "invalid-url"})
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Navigation failed: Invalid URL format" in action_result.content[0]["text"]
         )
 
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
 
-        assert "Select options [bar, baz]" in text_content
-        assert "Page Title: Title" in text_content
-        assert 'option "Bar" [selected]' in text_content
-        assert 'option "Baz" [selected]' in text_content
+@pytest.mark.asyncio
+async def test_browser_close_error_handling():
+    # Test error handling in browser close
+    core_tools = get_core_tools(capture_snapshot=False)
+    close_tool = next(
+        tool for tool in core_tools if tool.schema.name == "browser_close"
+    )
+
+    # Mock service error result
+    mock_service_result = {"success": False, "error": "No browser instance available"}
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(CoreService, "close_browser", return_value=mock_service_result):
+        result = await close_tool.handle(mock_context, {})
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Error: No browser instance available" in action_result.content[0]["text"]
+        )
 
 
 @pytest.mark.asyncio
-async def test_browser_console_messages(tool_registry: EnhancedToolRegistry):
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": """
-- Ran Playwright code:
-```js
-// Get console messages
-console.log('Console messages retrieved');
-```
+async def test_core_tools_capability_filtering():
+    # Test that core tools have proper capability filtering
+    core_tools = get_core_tools(capture_snapshot=False)
 
-Console Messages:
-[LOG] Key pressed: Enter , Text: Hi!
-""",
-            }
-        ]
+    # Check that we have the expected core tools
+    tool_names = [tool.schema.name for tool in core_tools]
+    expected_tools = ["browser_navigate", "browser_close", "browser_resize"]
 
-        result = await tool_registry.execute_tool("browser_console_messages", {})
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing core tool: {expected_tool}"
 
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
+    # Check that tools have CORE or HISTORY capability
+    from core.tool_schema import ToolCapability
 
-        assert "[LOG] Key pressed: Enter , Text: Hi!" in text_content
+    for tool in core_tools:
+        assert tool.capability in [ToolCapability.CORE, ToolCapability.HISTORY]
 
 
 @pytest.mark.asyncio
-async def test_browser_snapshot(tool_registry: EnhancedToolRegistry, server):
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": f"""
-- Ran Playwright code:
-```js
-// Take snapshot
-await page.screenshot();
-```
+async def test_core_tools_with_different_capture_snapshot():
+    # Test that tools respect capture_snapshot parameter
+    tools_with_snapshot = get_core_tools(capture_snapshot=True)
+    tools_without_snapshot = get_core_tools(capture_snapshot=False)
 
-- Page URL: {server.HELLO_WORLD}
-- Page Title: Title
-- Page Snapshot
-```yaml
-- generic [ref=e1]: Hello, world!
-```
-""",
-            }
-        ]
+    # Find navigate tool in both sets
+    navigate_with_snapshot = next(
+        tool for tool in tools_with_snapshot if tool.schema.name == "browser_navigate"
+    )
+    navigate_without_snapshot = next(
+        tool
+        for tool in tools_without_snapshot
+        if tool.schema.name == "browser_navigate"
+    )
 
-        result = await tool_registry.execute_tool("browser_snapshot", {})
+    # Create mock context and service result
+    mock_context = MagicMock()
+    mock_service_result = {
+        "success": True,
+        "data": {"url": "https://example.com"},
+        "message": "Navigated to https://example.com",
+    }
 
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
+    with patch.object(CoreService, "navigate_to_url", return_value=mock_service_result):
+        result_with_snapshot = await navigate_with_snapshot.handle(
+            mock_context, {"url": "https://example.com"}
+        )
+        result_without_snapshot = await navigate_without_snapshot.handle(
+            mock_context, {"url": "https://example.com"}
+        )
 
-        assert "Page URL:" in text_content
-        assert "Page Title: Title" in text_content
-        assert "Page Snapshot" in text_content
-        assert "- generic [ref=e1]: Hello, world!" in text_content
+        assert result_with_snapshot.capture_snapshot is True
+        assert result_without_snapshot.capture_snapshot is False
 
 
 @pytest.mark.asyncio
-async def test_browser_go_back(tool_registry: EnhancedToolRegistry):
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": """
-- Ran Playwright code:
-```js
-// Go back to previous page
-await page.goBack();
-```
+async def test_tool_schema_validation():
+    # Test that core tools have proper schema validation
+    core_tools = get_core_tools(capture_snapshot=False)
 
-Navigated back to previous page successfully.
-Current URL: https://previous.example.com
-""",
-            }
-        ]
-
-        result = await tool_registry.execute_tool("browser_go_back", {})
-
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
-
-        assert "Go back to previous page" in text_content
-        assert "Navigated back to previous page successfully" in text_content
-        assert "Current URL: https://previous.example.com" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_go_forward(tool_registry: EnhancedToolRegistry):
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": """
-- Ran Playwright code:
-```js
-// Go forward to next page
-await page.goForward();
-```
-
-Navigated forward to next page successfully.
-Current URL: https://next.example.com
-""",
-            }
-        ]
-
-        result = await tool_registry.execute_tool("browser_go_forward", {})
-
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
-
-        assert "Go forward to next page" in text_content
-        assert "Navigated forward to next page successfully" in text_content
-        assert "Current URL: https://next.example.com" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_reload(tool_registry: EnhancedToolRegistry):
-    with patch.object(tool_registry, "execute_tool") as mock_execute:
-        mock_execute.return_value = MagicMock()
-        mock_execute.return_value.content = [
-            {
-                "type": "text",
-                "text": """
-- Ran Playwright code:
-```js
-// Reload current page
-await page.reload();
-```
-
-Page reloaded successfully.
-Current URL: https://example.com
-Page Title: Example Domain
-""",
-            }
-        ]
-
-        result = await tool_registry.execute_tool("browser_reload", {})
-
-        assert hasattr(result, "content")
-        assert result.content is not None
-        text_content = ""
-        for item in result.content:
-            if item.get("type") == "text":
-                text_content += item.get("text", "")
-
-        assert "Reload current page" in text_content
-        assert "Page reloaded successfully" in text_content
-        assert "Current URL: https://example.com" in text_content
-        assert "Page Title: Example Domain" in text_content
+    for tool in core_tools:
+        assert tool.schema.name is not None
+        assert tool.schema.title is not None
+        assert tool.schema.description is not None
+        assert tool.schema.input_schema is not None
+        assert tool.schema.tool_type is not None
+        assert tool.handle is not None
+        assert tool.capability is not None

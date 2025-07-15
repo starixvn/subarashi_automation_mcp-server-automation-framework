@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -8,10 +8,11 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import EmptyInputSchema
+from core.schemas import EmptyInputSchema
+from services.testing_service import TestingService
 
 if TYPE_CHECKING:
-    from ..context import ServerContext
+    from context import ServerContext
 
 
 @define_tool_factory(
@@ -24,38 +25,31 @@ if TYPE_CHECKING:
 )
 def browser_generate_test_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
-        tab = context.current_tab_or_die()
-        
-        code = ["// Generate test for current page state"]
+        service = TestingService(context)
+
+        code = [
+            "# Generate test code for current page",
+            "# Creates Playwright test template",
+        ]
 
         async def action() -> ToolActionResult:
-            try:
-                url = tab.url()
-                title = await tab.title()
-                
-                test_code = [
-                    "import { test, expect } from '@playwright/test';",
-                    "",
-                    f"test('Test for {title}', async ({{ page }}) => {{",
-                    f"  await page.goto('{url}');",
-                    f"  await expect(page).toHaveTitle('{title}');",
-                    "});",
-                ]
-                
+            result = await service.generate_test()
+
+            if result.success:
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": f"Generated test:\n\n```typescript\n" + "\n".join(test_code) + "\n```",
+                            "text": f"Generated test:\n\n```typescript\n{result.data['test_code']}\n```",
                         }
                     ]
                 )
-            except Exception as e:
+            else:
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": f"Failed to generate test: {str(e)}",
+                            "text": result.message,
                         }
                     ]
                 )
@@ -81,6 +75,7 @@ def browser_generate_test_factory(capture_snapshot: bool) -> Tool:
 def get_testing_tools(capture_snapshot: bool = True) -> list[Tool]:
     return [
         browser_generate_test_factory(capture_snapshot),
-    ] 
+    ]
+
 
 TESTING_TOOLS = get_testing_tools()
