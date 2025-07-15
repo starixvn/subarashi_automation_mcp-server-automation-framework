@@ -252,17 +252,17 @@ class EnhancedToolRegistry:
                 content=[{"type": "text", "text": "\n".join(result_lines)}]
             )
 
-        if not self.context._current_tab:
+        try:
+            tab = await self.context.ensure_tab()
+        except Exception as e:
             return ToolActionResult(
                 content=[
                     {
                         "type": "text",
-                        "text": 'No open pages available. Use the "browser_navigate" tool to navigate to a page first.',
+                        "text": f"Failed to initialize browser: {str(e)}",
                     }
                 ]
             )
-
-        tab = self.context.current_tab_or_die()
 
         action_result = None
         if tool_result.action:

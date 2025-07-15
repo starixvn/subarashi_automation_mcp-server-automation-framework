@@ -157,6 +157,7 @@ class MCPServer:
         self.capabilities = capabilities
         self.context = ServerContext(self.settings, capabilities=capabilities)
         self.server = create_server(self.settings, capabilities, self.context)
+        self._context_initialized = False
 
         def on_initialized():
             if hasattr(self.server, "_session") and hasattr(
@@ -171,6 +172,13 @@ class MCPServer:
 
         if hasattr(self.server, "set_initialized_callback"):
             self.server.set_initialized_callback(on_initialized)
+
+    async def _ensure_context_started(self):
+        """Ensure browser context is initialized"""
+        if not self._context_initialized:
+            await self.context.start()
+            self._context_initialized = True
+            logger.info("Browser context initialized successfully")
 
     def create_initialization_options(self) -> InitializationOptions:
         return InitializationOptions(

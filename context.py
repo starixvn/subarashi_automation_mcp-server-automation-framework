@@ -204,7 +204,20 @@ class ServerContext:
         browser_context = context_result.browser_context
 
         if not self._current_tab:
-            await browser_context.new_page()
+            page = await browser_context.new_page()
+            new_tab = next((tab for tab in self._tabs if tab.page == page), None)
+            if new_tab:
+                self._current_tab = new_tab
+            else:
+                tab = Tab(page)
+                tab.set_modal_callbacks(
+                    on_dialog=self._on_dialog_shown,
+                    on_file_chooser=self._on_file_chooser_shown,
+                    on_download=self._on_download_started,
+                )
+                page.on("close", lambda: self._on_page_closed(tab))
+                self._tabs.append(tab)
+                self._current_tab = tab
 
         return self._current_tab
 
