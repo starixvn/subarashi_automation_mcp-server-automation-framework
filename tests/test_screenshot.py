@@ -47,10 +47,12 @@ async def test_browser_screenshot():
     ):
         result = await screenshot_tool.handle(mock_context, {"full_page": False})
 
-        # Test ToolResult structure
+        # Test ToolResult structure - updated for enhanced version
         assert result.code == [
-            "# Take screenshot of current page",
+            "# Take enhanced screenshot with advanced options",
             "# Full page: False",
+            "# Format: png",
+            "# Quality: 80",
         ]
         assert result.capture_snapshot is False
         assert result.wait_for_network is False
@@ -100,10 +102,12 @@ async def test_browser_screenshot_full_page():
     ):
         result = await screenshot_tool.handle(mock_context, {"full_page": True})
 
-        # Test ToolResult structure
+        # Test ToolResult structure - updated for enhanced version
         assert result.code == [
-            "# Take screenshot of current page",
+            "# Take enhanced screenshot with advanced options",
             "# Full page: True",
+            "# Format: png",
+            "# Quality: 80",
         ]
         assert result.capture_snapshot is False
         assert result.wait_for_network is False
@@ -147,11 +151,13 @@ async def test_browser_save_screenshot():
             mock_context, {"filename": "test_screenshot.png", "full_page": False}
         )
 
-        # Test ToolResult structure
+        # Test ToolResult structure - updated for enhanced version
         assert result.code == [
-            "# Save screenshot to file",
+            "# Save enhanced screenshot to file",
             "# Filename: test_screenshot.png",
             "# Full page: False",
+            "# Format: png",
+            "# Quality: 80",
         ]
         assert result.capture_snapshot is False
         assert result.wait_for_network is False
@@ -189,14 +195,17 @@ async def test_browser_screen_click():
             mock_context, {"x": 100, "y": 200, "element": "button"}
         )
 
-        # Test ToolResult structure
+        # Test ToolResult structure - updated for enhanced version
         assert result.code == [
-            "# Click at screen coordinates",
+            "# Advanced screen click with validation",
             "# Position: (100, 200)",
             "# Element: button",
+            "# Click type: left",
+            "# Modifiers: []",
+            "# Validate bounds: True",
         ]
         assert result.capture_snapshot is True
-        assert result.wait_for_network is True
+        assert result.wait_for_network is True  # Screen click waits for network
         assert result.action is not None
 
         # Test action execution
@@ -233,10 +242,10 @@ async def test_browser_capture_snapshot():
     ):
         result = await capture_snapshot_tool.handle(mock_context, {})
 
-        # Test ToolResult structure
+        # Test ToolResult structure - updated for enhanced version
         assert result.code == [
-            "# Capture page snapshot",
-            "# Includes accessibility tree and page content",
+            "# Capture enhanced page snapshot",
+            "# Includes accessibility tree, page content, and element references",
         ]
         assert result.capture_snapshot is False
         assert result.wait_for_network is False
@@ -324,6 +333,9 @@ async def test_vision_capability_filtering():
         "browser_screenshot",
         "browser_save_screenshot",
         "browser_screen_click",
+        "browser_screen_drag",
+        "browser_screen_type",
+        "browser_move_mouse",
         "browser_capture_snapshot",
     ]
 
@@ -408,7 +420,7 @@ async def test_vision_tools_schema_validation():
         assert tool.handle is not None
         assert tool.capability is not None
 
-        # Test that vision tools have read-only type (screenshots don't modify page)
+        # Test that vision tools have appropriate types
         from core.tool_schema import ToolType
 
         if tool.schema.name in [
@@ -417,7 +429,7 @@ async def test_vision_tools_schema_validation():
             "browser_capture_snapshot",
         ]:
             assert tool.schema.tool_type == ToolType.READ_ONLY
-        else:  # browser_screen_click
+        else:  # Interactive tools like click, drag, type, move
             assert tool.schema.tool_type == ToolType.DESTRUCTIVE
 
 
@@ -442,28 +454,73 @@ async def test_vision_tools_network_settings():
                     VisionService, "screen_click", return_value=mock_service_result
                 ):
                     with patch.object(
-                        VisionService,
-                        "capture_snapshot",
-                        return_value=mock_service_result,
+                        VisionService, "screen_drag", return_value=mock_service_result
                     ):
-                        if tool.schema.name == "browser_screenshot":
-                            result = await tool.handle(
-                                mock_context, {"full_page": False}
-                            )
-                        elif tool.schema.name == "browser_save_screenshot":
-                            result = await tool.handle(
-                                mock_context,
-                                {"filename": "test.png", "full_page": False},
-                            )
-                        elif tool.schema.name == "browser_screen_click":
-                            result = await tool.handle(
-                                mock_context, {"x": 100, "y": 100, "element": "button"}
-                            )
-                        elif tool.schema.name == "browser_capture_snapshot":
-                            result = await tool.handle(mock_context, {})
-
-                        # Vision operations shouldn't wait for network except screen_click
-                        if tool.schema.name == "browser_screen_click":
-                            assert result.wait_for_network is True
-                        else:
-                            assert result.wait_for_network is False
+                        with patch.object(
+                            VisionService,
+                            "screen_type",
+                            return_value=mock_service_result,
+                        ):
+                            with patch.object(
+                                VisionService,
+                                "move_mouse",
+                                return_value=mock_service_result,
+                            ):
+                                with patch.object(
+                                    VisionService,
+                                    "capture_snapshot",
+                                    return_value=mock_service_result,
+                                ):
+                                    if tool.schema.name == "browser_screenshot":
+                                        result = await tool.handle(
+                                            mock_context, {"full_page": False}
+                                        )
+                                        assert result.wait_for_network is False
+                                    elif tool.schema.name == "browser_save_screenshot":
+                                        result = await tool.handle(
+                                            mock_context,
+                                            {
+                                                "filename": "test.png",
+                                                "full_page": False,
+                                            },
+                                        )
+                                        assert result.wait_for_network is False
+                                    elif tool.schema.name == "browser_screen_click":
+                                        result = await tool.handle(
+                                            mock_context,
+                                            {"x": 100, "y": 100, "element": "button"},
+                                        )
+                                        # Screen click waits for network in enhanced version
+                                        assert result.wait_for_network is True
+                                    elif tool.schema.name == "browser_screen_drag":
+                                        result = await tool.handle(
+                                            mock_context,
+                                            {
+                                                "element": "button",
+                                                "from_x": 100,
+                                                "from_y": 100,
+                                                "to_x": 200,
+                                                "to_y": 200,
+                                            },
+                                        )
+                                        assert result.wait_for_network is True
+                                    elif tool.schema.name == "browser_screen_type":
+                                        result = await tool.handle(
+                                            mock_context,
+                                            {
+                                                "text": "test",
+                                                "element": "input",
+                                                "x": 100,
+                                                "y": 100,
+                                            },
+                                        )
+                                        assert result.wait_for_network is True
+                                    elif tool.schema.name == "browser_move_mouse":
+                                        result = await tool.handle(
+                                            mock_context,
+                                            {"element": "button", "x": 100, "y": 100},
+                                        )
+                                        assert result.wait_for_network is False
+                                    elif tool.schema.name == "browser_capture_snapshot":
+                                        result = await tool.handle(mock_context, {})
+                                        assert result.wait_for_network is False

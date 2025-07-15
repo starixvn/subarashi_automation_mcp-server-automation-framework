@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 import json
 from pydantic import Field, validator
 from core.tool_schema import ToolInputSchema
@@ -63,8 +63,44 @@ class WaitForSelectorInputSchema(ToolInputSchema):
 
 class ScreenshotInputSchema(ToolInputSchema):
     full_page: Optional[bool] = Field(
-        default=True, description="Take full page screenshot"
+        default=True, description="Take full page screenshot instead of viewport only"
     )
+    quality: Optional[int] = Field(
+        default=80,
+        ge=1,
+        le=100,
+        description="Image quality for JPEG format (1-100, higher is better)",
+    )
+    format: Optional[Literal["png", "jpeg"]] = Field(
+        default="png",
+        description="Image format - PNG for lossless, JPEG for smaller file size",
+    )
+    element_selector: Optional[str] = Field(
+        default=None, description="CSS selector to screenshot only specific element"
+    )
+    clip_region: Optional[Dict[str, int]] = Field(
+        default=None,
+        description="Clip region as {x, y, width, height} for partial screenshot",
+    )
+    omit_background: Optional[bool] = Field(
+        default=False, description="Hide default white background for transparent PNG"
+    )
+    scale: Optional[Literal["css", "device"]] = Field(
+        default="css",
+        description="Whether to use CSS pixels or device pixels for scaling",
+    )
+
+    @validator("clip_region")
+    def validate_clip_region(cls, v):
+        if v is not None:
+            required_keys = {"x", "y", "width", "height"}
+            if not all(key in v for key in required_keys):
+                raise ValueError(f"clip_region must contain {required_keys}")
+            if any(val < 0 for val in v.values()):
+                raise ValueError("clip_region coordinates must be non-negative")
+            if v["width"] <= 0 or v["height"] <= 0:
+                raise ValueError("clip_region width and height must be positive")
+        return v
 
 
 class SaveScreenshotInputSchema(ToolInputSchema):
@@ -72,32 +108,201 @@ class SaveScreenshotInputSchema(ToolInputSchema):
     full_page: Optional[bool] = Field(
         default=True, description="Take full page screenshot"
     )
+    quality: Optional[int] = Field(
+        default=80, ge=1, le=100, description="Image quality for JPEG format"
+    )
+    format: Optional[Literal["png", "jpeg"]] = Field(
+        default="png", description="Image format"
+    )
+    element_selector: Optional[str] = Field(
+        default=None, description="CSS selector to screenshot only specific element"
+    )
+    clip_region: Optional[Dict[str, int]] = Field(
+        default=None, description="Clip region as {x, y, width, height}"
+    )
+    create_directories: Optional[bool] = Field(
+        default=True, description="Create parent directories if they don't exist"
+    )
+    overwrite: Optional[bool] = Field(
+        default=True, description="Overwrite existing file if it exists"
+    )
 
     @validator("filename")
     def validate_filename(cls, v):
         if not v.strip():
             raise ValueError("Filename cannot be empty")
+
+        import os
+
+        if ".." in v or os.path.isabs(v):
+            raise ValueError("Filename cannot contain '..' or be absolute path")
+
+        valid_extensions = {".png", ".jpg", ".jpeg"}
+        if not any(v.lower().endswith(ext) for ext in valid_extensions):
+            v += ".png"
+
         return v.strip()
+
+    @validator("clip_region")
+    def validate_clip_region(cls, v):
+        if v is not None:
+            required_keys = {"x", "y", "width", "height"}
+            if not all(key in v for key in required_keys):
+                raise ValueError(f"clip_region must contain {required_keys}")
+            if any(val < 0 for val in v.values()):
+                raise ValueError("clip_region coordinates must be non-negative")
+            if v["width"] <= 0 or v["height"] <= 0:
+                raise ValueError("clip_region width and height must be positive")
+        return v
+
+
+class PdfInputSchema(ToolInputSchema):
+    """Schema for PDF generation operations"""
+
+    filename: str = Field(description="Filename for the PDF file")
+    full_page: Optional[bool] = Field(default=True, description="Save full page as PDF")
+    format: Optional[Literal["A4", "A3", "Letter", "Legal"]] = Field(
+        default="A4", description="Paper format for PDF"
+    )
+    landscape: Optional[bool] = Field(
+        default=False, description="Use landscape orientation"
+    )
+    margin: Optional[Dict[str, str]] = Field(
+        default=None, description="Page margins as {top, right, bottom, left}"
+    )
+    scale: Optional[float] = Field(
+        default=1.0, ge=0.1, le=2.0, description="Scale factor for PDF generation"
+    )
+    print_background: Optional[bool] = Field(
+        default=True, description="Include background graphics in PDF"
+    )
+    header_template: Optional[str] = Field(
+        default=None, description="HTML template for page header"
+    )
+    footer_template: Optional[str] = Field(
+        default=None, description="HTML template for page footer"
+    )
+    display_header_footer: Optional[bool] = Field(
+        default=False, description="Display header and footer"
+    )
+
+    @validator("filename")
+    def validate_pdf_filename(cls, v):
+        if not v.strip():
+            raise ValueError("Filename cannot be empty")
+
+        import os
+
+        if ".." in v or os.path.isabs(v):
+            raise ValueError("Filename cannot contain '..' or be absolute path")
+
+        # For PDF files, ensure .pdf extension
+        if not v.lower().endswith(".pdf"):
+            v += ".pdf"
+
+        return v.strip()
+
+    @validator("margin")
+    def validate_margin(cls, v):
+        if v is not None:
+            required_keys = {"top", "right", "bottom", "left"}
+            if not all(key in v for key in required_keys):
+                raise ValueError("margin must contain top, right, bottom, left")
+            # Validate margin values are valid CSS units
+            for key, value in v.items():
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"margin.{key} must be a non-empty string")
+        return v
 
 
 class ScreenClickInputSchema(ToolInputSchema):
     element: str = Field(description="Human-readable element description")
     x: int = Field(description="X coordinate", ge=0)
     y: int = Field(description="Y coordinate", ge=0)
+    click_type: Optional[Literal["left", "right", "double", "middle"]] = Field(
+        default="left", description="Type of click to perform"
+    )
+    modifiers: Optional[List[Literal["Alt", "Control", "Meta", "Shift"]]] = Field(
+        default_factory=list, description="Keyboard modifiers to hold during click"
+    )
+    button_delay: Optional[int] = Field(
+        default=0,
+        ge=0,
+        le=5000,
+        description="Delay between mousedown and mouseup in milliseconds",
+    )
+    click_count: Optional[int] = Field(
+        default=1,
+        ge=1,
+        le=3,
+        description="Number of clicks to perform (1=single, 2=double, 3=triple)",
+    )
+    force: Optional[bool] = Field(
+        default=False,
+        description="Force click even if coordinates are outside viewport",
+    )
+    validate_bounds: Optional[bool] = Field(
+        default=True, description="Validate coordinates are within viewport bounds"
+    )
+
+    @validator("modifiers")
+    def validate_modifiers(cls, v):
+        if v:
+            seen = set()
+            result = []
+            for modifier in v:
+                if modifier not in seen:
+                    seen.add(modifier)
+                    result.append(modifier)
+            return result
+        return v or []
 
 
 class ScreenDragInputSchema(ToolInputSchema):
     element: str = Field(description="Human-readable element description")
-    start_x: int = Field(description="Start X coordinate", ge=0)
-    start_y: int = Field(description="Start Y coordinate", ge=0)
-    end_x: int = Field(description="End X coordinate", ge=0)
-    end_y: int = Field(description="End Y coordinate", ge=0)
+    from_x: int = Field(description="Starting X coordinate", ge=0)
+    from_y: int = Field(description="Starting Y coordinate", ge=0)
+    to_x: int = Field(description="Ending X coordinate", ge=0)
+    to_y: int = Field(description="Ending Y coordinate", ge=0)
+    modifiers: Optional[List[Literal["Alt", "Control", "Meta", "Shift"]]] = Field(
+        default_factory=list, description="Keyboard modifiers to hold during drag"
+    )
+    steps: Optional[int] = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Number of intermediate steps for smooth dragging",
+    )
+    validate_bounds: Optional[bool] = Field(
+        default=True, description="Validate coordinates are within viewport bounds"
+    )
+
+    @validator("modifiers")
+    def validate_modifiers(cls, v):
+        if v:
+            seen = set()
+            result = []
+            for modifier in v:
+                if modifier not in seen:
+                    seen.add(modifier)
+                    result.append(modifier)
+            return result
+        return v or []
 
 
 class ScreenTypeInputSchema(ToolInputSchema):
+    element: str = Field(description="Human-readable element description")
+    x: int = Field(description="X coordinate to click before typing", ge=0)
+    y: int = Field(description="Y coordinate to click before typing", ge=0)
     text: str = Field(description="Text to type")
-    submit: Optional[bool] = Field(
-        default=False, description="Whether to submit entered text"
+    delay: Optional[int] = Field(
+        default=0, ge=0, le=1000, description="Delay between keystrokes in milliseconds"
+    )
+    clear_first: Optional[bool] = Field(
+        default=False, description="Clear existing text before typing"
+    )
+    validate_bounds: Optional[bool] = Field(
+        default=True, description="Validate coordinates are within viewport bounds"
     )
 
 
@@ -105,6 +310,15 @@ class ScreenMoveMouseInputSchema(ToolInputSchema):
     element: str = Field(description="Human-readable element description")
     x: int = Field(description="X coordinate", ge=0)
     y: int = Field(description="Y coordinate", ge=0)
+    steps: Optional[int] = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Number of intermediate steps for smooth movement",
+    )
+    validate_bounds: Optional[bool] = Field(
+        default=True, description="Validate coordinates are within viewport bounds"
+    )
 
 
 class NewTabInputSchema(ToolInputSchema):

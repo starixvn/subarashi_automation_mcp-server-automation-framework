@@ -206,15 +206,82 @@ class PageSnapshot:
                 const iframes = document.querySelectorAll('iframe');
                 iframes.forEach((iframe, frameIndex) => {
                     try {
-                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        const iframeRect = iframe.getBoundingClientRect();
+                        const isVisible = iframeRect.width > 0 && iframeRect.height > 0;
+                        
+                        if (!isVisible) {
+                            console.log(`Skipping hidden iframe ${frameIndex}`);
+                            return;
+                        }
+                        
+                        let frameSelector = '';
+                        if (iframe.id) {
+                            frameSelector = `#${iframe.id}`;
+                        } else if (iframe.name) {
+                            frameSelector = `[name="${iframe.name}"]`;
+                        } else if (iframe.src) {
+                            frameSelector = `iframe[src*="${iframe.src.split('/').pop()}"]`;
+                        } else {
+                            frameSelector = `iframe:nth-of-type(${frameIndex + 1})`;
+                        }
+                        
+                        let iframeDoc = null;
+                        try {
+                            iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                        } catch (accessError) {
+                            console.log(`Cross-origin iframe ${frameIndex}: ${accessError.message}`);
+                            
+                            const iframeRef = `iframe_${frameIndex}`;
+                            iframe.setAttribute('data-ref', iframeRef);
+                            
+                            elements.push({
+                                ref: iframeRef,
+                                element: `[iframe] ${iframe.src || 'Unknown source'} (cross-origin)`,
+                                x: Math.round(iframeRect.left + iframeRect.width / 2),
+                                y: Math.round(iframeRect.top + iframeRect.height / 2),
+                                width: Math.round(iframeRect.width),
+                                height: Math.round(iframeRect.height),
+                                tag_name: 'iframe',
+                                text: null,
+                                iframe_index: frameIndex,
+                                iframe_selector: frameSelector,
+                                attributes: {
+                                    id: iframe.id || null,
+                                    name: iframe.name || null,
+                                    src: iframe.src || null,
+                                    cross_origin: true
+                                }
+                            });
+                            return;
+                        }
+                        
                         if (iframeDoc) {
-                            const frameSelector = iframe.id ? `#${iframe.id}` : 
-                                                 iframe.name ? `[name="${iframe.name}"]` :
-                                                 `iframe:nth-of-type(${frameIndex + 1})`;
                             scanDocument(iframeDoc, frameIndex, frameSelector);
+                            
+                            const iframeRef = `iframe_container_${frameIndex}`;
+                            iframe.setAttribute('data-ref', iframeRef);
+                            
+                            elements.push({
+                                ref: iframeRef,
+                                element: `[iframe-container] ${iframe.src || 'Unknown source'}`,
+                                x: Math.round(iframeRect.left + iframeRect.width / 2),
+                                y: Math.round(iframeRect.top + iframeRect.height / 2),
+                                width: Math.round(iframeRect.width),
+                                height: Math.round(iframeRect.height),
+                                tag_name: 'iframe',
+                                text: null,
+                                iframe_index: null,
+                                iframe_selector: frameSelector,
+                                attributes: {
+                                    id: iframe.id || null,
+                                    name: iframe.name || null,
+                                    src: iframe.src || null,
+                                    cross_origin: false
+                                }
+                            });
                         }
                     } catch (e) {
-                        console.log(`Cannot access iframe ${frameIndex}: cross-origin restriction`);
+                        console.log(`Error processing iframe ${frameIndex}: ${e.message}`);
                     }
                 });
                 
@@ -347,8 +414,18 @@ class PageSnapshot:
         element_ref = self.get_element_reference(ref)
 
         if element_ref and element_ref.iframe_index is not None:
-            frame_locator = self.page.frame_locator(element_ref.iframe_selector)
-            return frame_locator.locator(f"[data-ref='{ref}']")
+            try:
+                if element_ref.iframe_selector:
+                    frame_locator = self.page.frame_locator(element_ref.iframe_selector)
+                    return frame_locator.locator(f"[data-ref='{ref}']")
+                else:
+                    frame_locator = self.page.frame_locator(
+                        f"iframe:nth-of-type({element_ref.iframe_index + 1})"
+                    )
+                    return frame_locator.locator(f"[data-ref='{ref}']")
+            except Exception as e:
+                print(f"Warning: Failed to access iframe for ref {ref}: {e}")
+                return self.page.locator(f"[data-ref='{ref}']")
         else:
             return self.page.locator(f"[data-ref='{ref}']")
 

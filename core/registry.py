@@ -24,7 +24,7 @@ from tools.wait import get_wait_tools
 from tools.pdf import get_pdf_tools
 from tools.testing import get_testing_tools
 from tools.api import get_api_tools
-from tools.vision import get_vision_screen_tools, get_screenshot_tools
+from tools.vision import get_vision_screen_tools, get_screenshot_tools, get_vision_tools
 from tools.snapshot import get_snapshot_tools
 from tools.utils import wait_for_completion
 from tools.google_sheets import get_google_sheets_tools
@@ -69,7 +69,7 @@ def create_vision_tools() -> List[Tool]:
     tools.extend(get_snapshot_tools(capture_snapshot=False))
     tools.extend(get_dialog_tools(capture_snapshot=False))
     tools.extend(get_tab_tools(capture_snapshot=False))
-    tools.extend(get_vision_screen_tools(capture_snapshot=False))
+    tools.extend(get_vision_tools(capture_snapshot=False))
     tools.extend(get_console_tools(capture_snapshot=False))
     tools.extend(get_keyboard_tools(capture_snapshot=False))
     tools.extend(get_network_tools(capture_snapshot=False))
@@ -143,7 +143,7 @@ class EnhancedToolRegistry:
         tools.extend(get_snapshot_tools(capture_snapshot=False))
         tools.extend(get_dialog_tools(capture_snapshot=False))
         tools.extend(get_tab_tools(capture_snapshot=False))
-        tools.extend(get_vision_screen_tools(capture_snapshot=False))
+        tools.extend(get_vision_tools(capture_snapshot=False))
         tools.extend(get_console_tools(capture_snapshot=False))
         tools.extend(get_keyboard_tools(capture_snapshot=False))
         tools.extend(get_network_tools(capture_snapshot=False))

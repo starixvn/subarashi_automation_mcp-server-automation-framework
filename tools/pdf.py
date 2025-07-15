@@ -8,7 +8,7 @@ from core.tool_schema import (
     Tool,
     ToolSchema,
 )
-from core.schemas import SaveScreenshotInputSchema
+from core.schemas import PdfInputSchema
 from services.pdf_service import PdfService
 
 if TYPE_CHECKING:
@@ -20,12 +20,12 @@ if TYPE_CHECKING:
     name="browser_save_pdf",
     title="Save as PDF",
     description="Save current page as PDF",
-    input_schema=SaveScreenshotInputSchema,
+    input_schema=PdfInputSchema,
     tool_type=ToolType.READ_ONLY,
 )
 def browser_save_pdf_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
-        validated_params = SaveScreenshotInputSchema(**params)
+        validated_params = PdfInputSchema(**params)
 
         service = PdfService(context)
 
@@ -60,7 +60,7 @@ def browser_save_pdf_factory(capture_snapshot: bool) -> Tool:
         name="browser_save_pdf",
         title="Save as PDF",
         description="Save current page as PDF",
-        input_schema=SaveScreenshotInputSchema,
+        input_schema=PdfInputSchema,
         tool_type=ToolType.READ_ONLY,
     )
 
