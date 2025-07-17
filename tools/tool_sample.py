@@ -6,7 +6,7 @@ example of how to implement a new tool following the established patterns.
 """
 
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from core.tool_schema import (
     define_tool,
     define_tool_factory,
@@ -52,7 +52,8 @@ class WeatherInputSchema(ToolInputSchema):
 
     include_forecast: bool = Field(default=False, description="Include 5-day forecast")
 
-    @validator("city")
+    @field_validator("city")
+    @classmethod
     def validate_city(cls, v):
         if not v.strip():
             raise ValueError("City name cannot be empty")
@@ -60,7 +61,8 @@ class WeatherInputSchema(ToolInputSchema):
         sanitized = "".join(c for c in v if c.isalnum() or c.isspace())
         return sanitized.strip()
 
-    @validator("country")
+    @field_validator("country")
+    @classmethod
     def validate_country(cls, v):
         if v is None:
             return None
@@ -70,7 +72,8 @@ class WeatherInputSchema(ToolInputSchema):
             raise ValueError("Country code must be 2 or 3 characters")
         return v
 
-    @validator("unit")
+    @field_validator("unit")
+    @classmethod
     def validate_unit(cls, v):
         allowed_units = ["celsius", "fahrenheit", "kelvin"]
         if v.lower() not in allowed_units:

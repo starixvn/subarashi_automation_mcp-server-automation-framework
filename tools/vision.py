@@ -63,7 +63,6 @@ def browser_screenshot_factory(capture_snapshot: bool) -> Tool:
             if result.success:
                 content = [{"type": "text", "text": result.message}]
 
-                # Add screenshot to content if available and client supports images
                 if (
                     context.client_supports_images()
                     and result.data
@@ -76,13 +75,11 @@ def browser_screenshot_factory(capture_snapshot: bool) -> Tool:
                     screenshot_data = result.data["content"][0]["data"]
                     if screenshot_data and len(screenshot_data) > 0:
                         try:
-                            # Safely encode screenshot data
                             if isinstance(screenshot_data, bytes):
                                 encoded_data = base64.b64encode(
                                     screenshot_data
                                 ).decode()
                             else:
-                                # If already string, assume it's base64 encoded
                                 encoded_data = screenshot_data
 
                             content.append(
@@ -486,7 +483,6 @@ def browser_capture_snapshot_factory(capture_snapshot: bool) -> Tool:
 
 
 def get_screenshot_tools(capture_snapshot: bool = True) -> list[Tool]:
-    """Enhanced screenshot tools with advanced functionality"""
     return [
         browser_screenshot_factory(capture_snapshot),
         browser_save_screenshot_factory(capture_snapshot),
@@ -494,7 +490,6 @@ def get_screenshot_tools(capture_snapshot: bool = True) -> list[Tool]:
 
 
 def get_vision_screen_tools(capture_snapshot: bool = True) -> list[Tool]:
-    """Enhanced vision screen tools with comprehensive validation"""
     return [
         browser_screen_click_factory(capture_snapshot),
         browser_screen_drag_factory(capture_snapshot),
@@ -505,7 +500,6 @@ def get_vision_screen_tools(capture_snapshot: bool = True) -> list[Tool]:
 
 
 def get_vision_tools(capture_snapshot: bool = True) -> list[Tool]:
-    """All enhanced vision tools for enterprise-grade automation"""
     return [
         browser_screenshot_factory(capture_snapshot),
         browser_save_screenshot_factory(capture_snapshot),

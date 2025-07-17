@@ -1,6 +1,6 @@
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Union
 import json
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from core.tool_schema import ToolInputSchema
 
 
@@ -11,7 +11,8 @@ class EmptyInputSchema(ToolInputSchema):
 class NavigateInputSchema(ToolInputSchema):
     url: str = Field(description="The URL to navigate to")
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url(cls, v):
         if not v.strip():
             raise ValueError("URL cannot be empty")
@@ -62,10 +63,10 @@ class WaitForSelectorInputSchema(ToolInputSchema):
 
 
 class ScreenshotInputSchema(ToolInputSchema):
-    full_page: Optional[bool] = Field(
+    full_page: Optional[Union[bool, str]] = Field(
         default=True, description="Take full page screenshot instead of viewport only"
     )
-    quality: Optional[int] = Field(
+    quality: Optional[Union[int, str]] = Field(
         default=80,
         ge=1,
         le=100,
@@ -82,7 +83,7 @@ class ScreenshotInputSchema(ToolInputSchema):
         default=None,
         description="Clip region as {x, y, width, height} for partial screenshot",
     )
-    omit_background: Optional[bool] = Field(
+    omit_background: Optional[Union[bool, str]] = Field(
         default=False, description="Hide default white background for transparent PNG"
     )
     scale: Optional[Literal["css", "device"]] = Field(
@@ -90,7 +91,30 @@ class ScreenshotInputSchema(ToolInputSchema):
         description="Whether to use CSS pixels or device pixels for scaling",
     )
 
-    @validator("clip_region")
+    @field_validator("full_page", "omit_background", mode="before")
+    @classmethod
+    def convert_string_to_bool(cls, v):
+        """Convert string representations to boolean for LLM compatibility"""
+        if isinstance(v, str):
+            if v.lower() in ("true", "1", "yes", "on"):
+                return True
+            elif v.lower() in ("false", "0", "no", "off"):
+                return False
+        return v
+
+    @field_validator("quality", mode="before")
+    @classmethod
+    def convert_string_to_int(cls, v):
+        """Convert string representations to int for LLM compatibility"""
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                pass
+        return v
+
+    @field_validator("clip_region")
+    @classmethod
     def validate_clip_region(cls, v):
         if v is not None:
             required_keys = {"x", "y", "width", "height"}
@@ -105,10 +129,10 @@ class ScreenshotInputSchema(ToolInputSchema):
 
 class SaveScreenshotInputSchema(ToolInputSchema):
     filename: str = Field(description="Filename for the screenshot")
-    full_page: Optional[bool] = Field(
+    full_page: Optional[Union[bool, str]] = Field(
         default=True, description="Take full page screenshot"
     )
-    quality: Optional[int] = Field(
+    quality: Optional[Union[int, str]] = Field(
         default=80, ge=1, le=100, description="Image quality for JPEG format"
     )
     format: Optional[Literal["png", "jpeg"]] = Field(
@@ -120,14 +144,35 @@ class SaveScreenshotInputSchema(ToolInputSchema):
     clip_region: Optional[Dict[str, int]] = Field(
         default=None, description="Clip region as {x, y, width, height}"
     )
-    create_directories: Optional[bool] = Field(
+    create_directories: Optional[Union[bool, str]] = Field(
         default=True, description="Create parent directories if they don't exist"
     )
-    overwrite: Optional[bool] = Field(
+    overwrite: Optional[Union[bool, str]] = Field(
         default=True, description="Overwrite existing file if it exists"
     )
 
-    @validator("filename")
+    @field_validator("full_page", "create_directories", "overwrite", mode="before")
+    @classmethod
+    def convert_string_to_bool(cls, v):
+        if isinstance(v, str):
+            if v.lower() in ("true", "1", "yes", "on"):
+                return True
+            elif v.lower() in ("false", "0", "no", "off"):
+                return False
+        return v
+
+    @field_validator("quality", mode="before")
+    @classmethod
+    def convert_string_to_int(cls, v):
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                pass
+        return v
+
+    @field_validator("filename")
+    @classmethod
     def validate_filename(cls, v):
         if not v.strip():
             raise ValueError("Filename cannot be empty")
@@ -143,7 +188,8 @@ class SaveScreenshotInputSchema(ToolInputSchema):
 
         return v.strip()
 
-    @validator("clip_region")
+    @field_validator("clip_region")
+    @classmethod
     def validate_clip_region(cls, v):
         if v is not None:
             required_keys = {"x", "y", "width", "height"}
@@ -186,7 +232,8 @@ class PdfInputSchema(ToolInputSchema):
         default=False, description="Display header and footer"
     )
 
-    @validator("filename")
+    @field_validator("filename")
+    @classmethod
     def validate_pdf_filename(cls, v):
         if not v.strip():
             raise ValueError("Filename cannot be empty")
@@ -202,7 +249,8 @@ class PdfInputSchema(ToolInputSchema):
 
         return v.strip()
 
-    @validator("margin")
+    @field_validator("margin")
+    @classmethod
     def validate_margin(cls, v):
         if v is not None:
             required_keys = {"top", "right", "bottom", "left"}
@@ -245,7 +293,8 @@ class ScreenClickInputSchema(ToolInputSchema):
         default=True, description="Validate coordinates are within viewport bounds"
     )
 
-    @validator("modifiers")
+    @field_validator("modifiers")
+    @classmethod
     def validate_modifiers(cls, v):
         if v:
             seen = set()
@@ -277,7 +326,8 @@ class ScreenDragInputSchema(ToolInputSchema):
         default=True, description="Validate coordinates are within viewport bounds"
     )
 
-    @validator("modifiers")
+    @field_validator("modifiers")
+    @classmethod
     def validate_modifiers(cls, v):
         if v:
             seen = set()
@@ -348,11 +398,13 @@ class WaitForInputSchema(ToolInputSchema):
         default=None, description="Text to wait for to disappear"
     )
 
-    @validator("time", "text", "text_gone")
-    def validate_at_least_one(cls, v, values):
-        if not any(
-            [values.get("time"), values.get("text"), values.get("text_gone"), v]
-        ):
+    @field_validator("time", "text", "text_gone")
+    @classmethod
+    def validate_at_least_one(cls, v, info):
+        field_name = info.field_name
+        data = info.data
+
+        if not any([data.get("time"), data.get("text"), data.get("text_gone"), v]):
             raise ValueError(
                 "At least one of time, text, or text_gone must be provided"
             )
@@ -362,7 +414,8 @@ class WaitForInputSchema(ToolInputSchema):
 class PressKeyInputSchema(ToolInputSchema):
     key: str = Field(description="Name of the key to press or character to generate")
 
-    @validator("key")
+    @field_validator("key")
+    @classmethod
     def validate_key(cls, v):
         if not v.strip():
             raise ValueError("Key cannot be empty")
@@ -383,7 +436,8 @@ class DragInputSchema(ToolInputSchema):
 class UploadFileInputSchema(ToolInputSchema):
     file_paths: List[str] = Field(description="List of file paths to upload")
 
-    @validator("file_paths")
+    @field_validator("file_paths")
+    @classmethod
     def validate_file_paths(cls, v):
         if not v:
             raise ValueError("At least one file path must be provided")
@@ -414,7 +468,9 @@ class SetRequestInterceptionInputSchema(ToolInputSchema):
 class ApiRequestInputSchema(ToolInputSchema):
     url: str = Field(description="API endpoint URL")
     method: str = Field(description="HTTP method (GET, POST, PUT, DELETE, PATCH)")
-    headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers")
+    headers: Optional[Union[Dict[str, str], str]] = Field(
+        default=None, description="HTTP headers"
+    )
     body: Optional[str] = Field(
         default=None, description="Request body for POST/PUT/PATCH"
     )
@@ -422,7 +478,8 @@ class ApiRequestInputSchema(ToolInputSchema):
         default=30, description="Request timeout in seconds", ge=1, le=300
     )
 
-    @validator("headers", pre=True)
+    @field_validator("headers", mode="before")
+    @classmethod
     def parse_headers(cls, v):
         if v is None:
             return v
@@ -435,14 +492,16 @@ class ApiRequestInputSchema(ToolInputSchema):
             return v
         raise ValueError("Headers must be a dictionary or JSON string")
 
-    @validator("method")
+    @field_validator("method")
+    @classmethod
     def validate_method(cls, v):
         allowed_methods = {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
         if v.upper() not in allowed_methods:
             raise ValueError(f"Method must be one of: {', '.join(allowed_methods)}")
         return v.upper()
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url(cls, v):
         if not v.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
@@ -452,7 +511,9 @@ class ApiRequestInputSchema(ToolInputSchema):
 class ApiTestInputSchema(ToolInputSchema):
     url: str = Field(description="API endpoint URL")
     method: str = Field(description="HTTP method (GET, POST, PUT, DELETE, PATCH)")
-    headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers")
+    headers: Optional[Union[Dict[str, str], str]] = Field(
+        default=None, description="HTTP headers"
+    )
     body: Optional[str] = Field(
         default=None, description="Request body for POST/PUT/PATCH"
     )
@@ -466,7 +527,8 @@ class ApiTestInputSchema(ToolInputSchema):
         default=30, description="Request timeout in seconds", ge=1, le=300
     )
 
-    @validator("headers", pre=True)
+    @field_validator("headers", mode="before")
+    @classmethod
     def parse_headers(cls, v):
         if isinstance(v, str):
             try:
@@ -480,13 +542,15 @@ class ApiTestInputSchema(ToolInputSchema):
                 return headers
         return v
 
-    @validator("method")
+    @field_validator("method")
+    @classmethod
     def validate_method(cls, v):
         if v.upper() not in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
             raise ValueError("Method must be GET, POST, PUT, DELETE, or PATCH")
         return v.upper()
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url(cls, v):
         if not v.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")

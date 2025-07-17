@@ -524,3 +524,45 @@ async def test_vision_tools_network_settings():
                                     elif tool.schema.name == "browser_capture_snapshot":
                                         result = await tool.handle(mock_context, {})
                                         assert result.wait_for_network is False
+
+
+@pytest.mark.asyncio
+async def test_llm_string_parameter_conversion():
+    """Test that string parameters from LLM are properly converted to correct types"""
+    from core.schemas import ScreenshotInputSchema, SaveScreenshotInputSchema
+
+    # Test ScreenshotInputSchema with string boolean and integer values
+    params_string_types = {
+        "full_page": "true",
+        "quality": "80",
+        "omit_background": "false",
+        "format": "png",
+    }
+
+    schema = ScreenshotInputSchema(**params_string_types)
+    assert schema.full_page is True
+    assert schema.quality == 80
+    assert schema.omit_background is False
+    assert schema.format == "png"
+
+    # Test with various boolean representations
+    params_bool_variants = {"full_page": "1", "omit_background": "0"}
+
+    schema = ScreenshotInputSchema(**params_bool_variants)
+    assert schema.full_page is True
+    assert schema.omit_background is False
+
+    # Test SaveScreenshotInputSchema
+    save_params = {
+        "filename": "test.png",
+        "full_page": "true",
+        "quality": "90",
+        "create_directories": "false",
+        "overwrite": "true",
+    }
+
+    save_schema = SaveScreenshotInputSchema(**save_params)
+    assert save_schema.full_page is True
+    assert save_schema.quality == 90
+    assert save_schema.create_directories is False
+    assert save_schema.overwrite is True

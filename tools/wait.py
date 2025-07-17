@@ -70,7 +70,6 @@ def browser_wait_for_factory(capture_snapshot: bool) -> Tool:
                             ]
                         )
 
-                # Build success message
                 conditions = []
                 if validated_params.time:
                     conditions.append(f"{validated_params.time} seconds")

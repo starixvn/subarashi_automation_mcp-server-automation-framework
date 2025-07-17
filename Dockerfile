@@ -51,6 +51,7 @@ COPY config/ ./config/
 COPY core/ ./core/
 COPY prompts/ ./prompts/
 COPY resources/ ./resources/
+COPY services/ ./services/
 COPY tools/ ./tools/
 COPY transports/ ./transports/
 
@@ -81,10 +82,11 @@ USER mcpuser
 EXPOSE 5000
 
 CMD ["python", "main.py", \
-     "--config", "config/docker-default.json", \
-     "--transport", "sse", \
-     "--host", "0.0.0.0", \
-     "--headless", \
-     "--isolated", \
-     "--no-sandbox", \
-     "--port", "5000"]
+    "--config", "config/docker-default.json", \
+    "--transport", "sse", \
+    "--host", "0.0.0.0", \
+    "--headless", \
+    "--isolated", \
+    "--no-sandbox", \
+    "--port", "5000", \
+    "--vision"]
