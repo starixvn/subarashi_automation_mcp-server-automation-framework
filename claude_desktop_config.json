@@ -1,3 +1,4 @@
+// MCP_Automation_Framework with cursor and claude desktop stdio
 {
   "mcpServers": {
     "MCP_Automation_Test": {
@@ -11,10 +12,27 @@
         "stdio"
       ]
     }
-  },
-  "#mcpServers": {
+  }
+}
+
+// MCP_Automation_Test with cursor sse
+{
+  "mcpServers": {
     "MCP_Automation_Test": {
-      "url": "http://localhost:8765"
+      "url": "http://localhost:5001/sse"
     }
   }
-} 
+}
+
+// MCP_Automation_Framework with claude desktop sse
+{
+  "mcpServers": {
+    "MCP_Automation_Framework": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://localhost:5001/sse"
+      ]
+    }
+  }
+}

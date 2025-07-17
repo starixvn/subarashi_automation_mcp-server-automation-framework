@@ -20,7 +20,6 @@ CONTENT_TYPE_JSON = "application/json"
 
 
 class StreamableHTTPServerTransport:
-
     def __init__(
         self,
         mcp_session_id: str | None,
@@ -173,7 +172,6 @@ class StreamableHTTPServerTransport:
 
 
 class StreamableHTTPSessionManager:
-
     def __init__(self, app, event_store=None, json_response=True, stateless=True):
         self.app = app
         self.event_store = event_store

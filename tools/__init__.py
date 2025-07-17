@@ -1,4 +1,4 @@
-from .tool_schema import (
+from core.tool_schema import (
     ToolCapability,
     ToolType,
     ToolResult,
@@ -14,9 +14,7 @@ from .tool_schema import (
     filter_tools_by_capabilities,
 )
 
-from .registry import EnhancedToolRegistry
-
-from .schemas import (
+from core.schemas import (
     EmptyInputSchema,
     NavigateInputSchema,
     ResizeInputSchema,
@@ -158,7 +156,6 @@ __all__ = [
     "validate_tool_input",
     "tool_to_mcp_schema",
     "filter_tools_by_capabilities",
-    "EnhancedToolRegistry",
     "EmptyInputSchema",
     "NavigateInputSchema",
     "ResizeInputSchema",

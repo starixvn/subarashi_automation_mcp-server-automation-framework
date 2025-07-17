@@ -9,14 +9,12 @@ if TYPE_CHECKING:
 
 
 class ModalStateType(str, Enum):
-
     DIALOG = "dialog"
     FILE_CHOOSER = "fileChooser"
 
 
 @dataclass
 class ModalState(ABC):
-
     type: ModalStateType
     description: str
 
@@ -27,7 +25,6 @@ class ModalState(ABC):
 
 @dataclass
 class DialogModalState(ModalState):
-
     dialog: "Dialog"
 
     def __init__(self, dialog: "Dialog", description: str):
@@ -46,7 +43,6 @@ class DialogModalState(ModalState):
 
 @dataclass
 class FileChooserModalState(ModalState):
-
     file_chooser: "FileChooser"
 
     def __init__(self, file_chooser: "FileChooser", description: str):
@@ -63,7 +59,6 @@ class FileChooserModalState(ModalState):
 
 @dataclass
 class ModalStateWithTab:
-
     modal_state: ModalState
     tab: "Tab"
 

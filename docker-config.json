@@ -50,7 +50,7 @@
     "google_sheets",
     "database"
   ],
-  "vision": false,
+  "vision": true,
   "save_trace": false,
   "output_dir": "/app/output",
   "image_responses": "auto",

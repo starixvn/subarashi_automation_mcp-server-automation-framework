@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 from tests.conftest import assert_text_content, assert_contains_text_content
 from context import ServerContext
-from tools.registry import EnhancedToolRegistry
-from tools.tool_schema import ToolCapability
+from core.registry import EnhancedToolRegistry
+from core.tool_schema import ToolCapability
 from config.settings import Config, get_default_config, config_to_settings
 
 

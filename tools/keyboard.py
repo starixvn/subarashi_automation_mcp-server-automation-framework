@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -8,7 +8,8 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import PressKeyInputSchema
+from core.schemas import PressKeyInputSchema
+from services.keyboard_service import KeyboardService
 
 if TYPE_CHECKING:
     from ..context import ServerContext
@@ -25,34 +26,25 @@ if TYPE_CHECKING:
 def browser_press_key_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = PressKeyInputSchema(**params)
-        
-        tab = context.current_tab_or_die()
-        
+
+        service = KeyboardService(context)
+
         code = [
-            f"// Press key '{validated_params.key}'",
-            f"await page.keyboard.press('{validated_params.key}');",
+            f"# Press key on keyboard",
+            f"# Key: '{validated_params.key}'",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                await tab.page.keyboard.press(validated_params.key)
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Pressed key '{validated_params.key}'",
-                        }
-                    ]
-                )
-            except Exception as e:
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Failed to press key '{validated_params.key}': {str(e)}",
-                        }
-                    ]
-                )
+            result = await service.press_key(validated_params.key)
+
+            return ToolActionResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": result.message,
+                    }
+                ]
+            )
 
         return ToolResult(
             code=code,
@@ -75,6 +67,7 @@ def browser_press_key_factory(capture_snapshot: bool) -> Tool:
 def get_keyboard_tools(capture_snapshot: bool = True) -> list[Tool]:
     return [
         browser_press_key_factory(capture_snapshot),
-    ] 
+    ]
+
 
 KEYBOARD_TOOLS = get_keyboard_tools()

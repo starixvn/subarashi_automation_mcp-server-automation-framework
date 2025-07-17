@@ -6,8 +6,8 @@ example of how to implement a new tool following the established patterns.
 """
 
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
-from pydantic import Field, validator
-from .tool_schema import (
+from pydantic import Field, field_validator
+from core.tool_schema import (
     define_tool,
     define_tool_factory,
     ToolCapability,
@@ -28,44 +28,41 @@ if TYPE_CHECKING:
 # STEP 1: Define Input Schema with Advanced Validation
 # =============================================================================
 
+
 class WeatherInputSchema(ToolInputSchema):
     """
     Advanced input schema with comprehensive validation.
     This demonstrates the sophisticated validation system.
     """
-    
+
     city: str = Field(
-        description="City name to get weather for",
-        min_length=2,
-        max_length=100
+        description="City name to get weather for", min_length=2, max_length=100
     )
-    
+
     country: Optional[str] = Field(
         default=None,
         description="Country code (optional, improves accuracy)",
         min_length=2,
-        max_length=3
+        max_length=3,
     )
-    
+
     unit: Optional[str] = Field(
-        default="celsius",
-        description="Temperature unit (celsius, fahrenheit, kelvin)"
+        default="celsius", description="Temperature unit (celsius, fahrenheit, kelvin)"
     )
-    
-    include_forecast: bool = Field(
-        default=False,
-        description="Include 5-day forecast"
-    )
-    
-    @validator("city")
+
+    include_forecast: bool = Field(default=False, description="Include 5-day forecast")
+
+    @field_validator("city")
+    @classmethod
     def validate_city(cls, v):
         if not v.strip():
             raise ValueError("City name cannot be empty")
         # Remove special characters that might cause issues
-        sanitized = ''.join(c for c in v if c.isalnum() or c.isspace())
+        sanitized = "".join(c for c in v if c.isalnum() or c.isspace())
         return sanitized.strip()
-    
-    @validator("country")
+
+    @field_validator("country")
+    @classmethod
     def validate_country(cls, v):
         if v is None:
             return None
@@ -74,8 +71,9 @@ class WeatherInputSchema(ToolInputSchema):
         if len(v) not in [2, 3]:
             raise ValueError("Country code must be 2 or 3 characters")
         return v
-    
-    @validator("unit")
+
+    @field_validator("unit")
+    @classmethod
     def validate_unit(cls, v):
         allowed_units = ["celsius", "fahrenheit", "kelvin"]
         if v.lower() not in allowed_units:
@@ -86,6 +84,7 @@ class WeatherInputSchema(ToolInputSchema):
 # =============================================================================
 # STEP 2: Implement Tool with Advanced Features
 # =============================================================================
+
 
 @define_tool_factory(
     capability=ToolCapability.API,  # Using existing capability
@@ -100,7 +99,7 @@ def weather_fetch_factory(capture_snapshot: bool) -> Tool:
     Factory function that creates the weather tool.
     This pattern allows for dynamic configuration based on capture_snapshot.
     """
-    
+
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         """
         Main tool handler - demonstrates advanced patterns:
@@ -110,10 +109,10 @@ def weather_fetch_factory(capture_snapshot: bool) -> Tool:
         4. Code generation for transparency
         5. Action execution with proper result handling
         """
-        
+
         # Validate input using our schema
         validated_params = WeatherInputSchema(**params)
-        
+
         # Generate code representation for transparency
         code_lines = [
             f"// Fetch weather for {validated_params.city}",
@@ -127,77 +126,81 @@ def weather_fetch_factory(capture_snapshot: bool) -> Tool:
             f"}});",
             f"return weatherData.json();",
         ]
-        
+
         # Define the actual action to execute
         async def action() -> ToolActionResult:
             try:
                 # Simulate API call with sophisticated error handling
                 import aiohttp
                 import asyncio
-                
+
                 # Mock weather API endpoint (replace with real API)
                 api_url = "https://api.openweathermap.org/data/2.5/weather"
-                
+
                 # Prepare request parameters
                 params = {
-                    "q": f"{validated_params.city},{validated_params.country}" if validated_params.country else validated_params.city,
-                    "units": "metric" if validated_params.unit == "celsius" else "imperial" if validated_params.unit == "fahrenheit" else "standard",
-                    "appid": "your_api_key_here"  # Would be from settings
+                    "q": f"{validated_params.city},{validated_params.country}"
+                    if validated_params.country
+                    else validated_params.city,
+                    "units": "metric"
+                    if validated_params.unit == "celsius"
+                    else "imperial"
+                    if validated_params.unit == "fahrenheit"
+                    else "standard",
+                    "appid": "your_api_key_here",  # Would be from settings
                 }
-                
+
                 # Advanced timeout and retry logic
                 timeout = aiohttp.ClientTimeout(total=10.0)
-                
+
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.get(api_url, params=params) as response:
                         if response.status == 200:
                             data = await response.json()
-                            
+
                             # Process and format the response
                             result_content = [
                                 {
                                     "type": "text",
-                                    "text": f"Weather for {validated_params.city}:\n" +
-                                           f"Temperature: {data.get('main', {}).get('temp', 'N/A')}°{validated_params.unit[0].upper()}\n" +
-                                           f"Condition: {data.get('weather', [{}])[0].get('description', 'N/A')}\n" +
-                                           f"Humidity: {data.get('main', {}).get('humidity', 'N/A')}%"
+                                    "text": f"Weather for {validated_params.city}:\n"
+                                    + f"Temperature: {data.get('main', {}).get('temp', 'N/A')}°{validated_params.unit[0].upper()}\n"
+                                    + f"Condition: {data.get('weather', [{}])[0].get('description', 'N/A')}\n"
+                                    + f"Humidity: {data.get('main', {}).get('humidity', 'N/A')}%",
                                 }
                             ]
-                            
+
                             # Add forecast if requested
                             if validated_params.include_forecast:
-                                result_content.append({
-                                    "type": "text",
-                                    "text": "5-day forecast: [Feature would be implemented here]"
-                                })
-                            
+                                result_content.append(
+                                    {
+                                        "type": "text",
+                                        "text": "5-day forecast: [Feature would be implemented here]",
+                                    }
+                                )
+
                             return ToolActionResult(content=result_content)
-                        
+
                         else:
                             # Handle API errors gracefully
                             error_msg = f"Weather API returned status {response.status}"
                             return ToolActionResult(
-                                content=[{
-                                    "type": "text",
-                                    "text": f"Error fetching weather: {error_msg}"
-                                }]
+                                content=[
+                                    {
+                                        "type": "text",
+                                        "text": f"Error fetching weather: {error_msg}",
+                                    }
+                                ]
                             )
-                            
+
             except aiohttp.ClientError as e:
                 return ToolActionResult(
-                    content=[{
-                        "type": "text",
-                        "text": f"Network error: {str(e)}"
-                    }]
+                    content=[{"type": "text", "text": f"Network error: {str(e)}"}]
                 )
             except Exception as e:
                 return ToolActionResult(
-                    content=[{
-                        "type": "text",
-                        "text": f"Unexpected error: {str(e)}"
-                    }]
+                    content=[{"type": "text", "text": f"Unexpected error: {str(e)}"}]
                 )
-        
+
         # Return the tool result with all components
         return ToolResult(
             code=code_lines,
@@ -205,7 +208,7 @@ def weather_fetch_factory(capture_snapshot: bool) -> Tool:
             capture_snapshot=capture_snapshot,
             wait_for_network=True,  # Wait for network completion
         )
-    
+
     # Create and return the tool schema
     schema = ToolSchema(
         name="weather_fetch",
@@ -214,7 +217,7 @@ def weather_fetch_factory(capture_snapshot: bool) -> Tool:
         input_schema=WeatherInputSchema,
         tool_type=ToolType.READ_ONLY,
     )
-    
+
     return Tool(
         capability=ToolCapability.API,
         schema=schema,
@@ -222,18 +225,18 @@ def weather_fetch_factory(capture_snapshot: bool) -> Tool:
         browser_independent=True,  # This tool doesn't need browser context
     )
 
+
 # =============================================================================
 # STEP 3: Export Tools (Required for Registry)
 # =============================================================================
+
 
 def get_sample_tools(capture_snapshot: bool = True) -> List[Tool]:
     """
     Export function required by the registry system.
     This function must exist for the tools to be discoverable.
     """
-    return [
-        weather_fetch_factory(capture_snapshot)
-    ]
+    return [weather_fetch_factory(capture_snapshot)]
 
 
 # Static export for backward compatibility

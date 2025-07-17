@@ -35,7 +35,6 @@ from starlette.responses import Response, JSONResponse
 from mcp.server.streamable_http import StreamableHTTPServerTransport
 
 
-
 from config.settings import Settings
 from context import ServerContext
 
@@ -43,9 +42,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_server(
-    settings: Optional[Settings] = None, 
+    settings: Optional[Settings] = None,
     capabilities: Optional[List[str]] = None,
-    context: Optional[ServerContext] = None
+    context: Optional[ServerContext] = None,
 ) -> Server:
     if settings is None:
         settings = Settings()
@@ -54,7 +53,7 @@ def create_server(
         context = ServerContext(settings, capabilities=capabilities)
 
     server = Server("mcp-automation-server")
-    
+
     prompts_handlers = get_prompts_handlers()
     resources_handlers = get_resources_handlers(context)
 
@@ -130,23 +129,25 @@ def create_server(
     @server.list_prompts()
     async def list_prompts() -> List[Prompt]:
         return await prompts_handlers["list_prompts"]()
-    
+
     @server.get_prompt()
-    async def get_prompt(name: str, arguments: Optional[Dict[str, Any]] = None) -> GetPromptResult:
+    async def get_prompt(
+        name: str, arguments: Optional[Dict[str, Any]] = None
+    ) -> GetPromptResult:
         return await prompts_handlers["get_prompt"](name, arguments)
-    
+
     @server.list_resources()
     async def list_resources() -> List[Resource]:
         return await resources_handlers["list_resources"]()
-    
+
     @server.read_resource()
     async def read_resource(uri: str) -> ReadResourceResult:
         return await resources_handlers["read_resource"](uri)
 
     return server
 
-class MCPServer:
 
+class MCPServer:
     def __init__(
         self,
         settings: Optional[Settings] = None,
@@ -156,35 +157,42 @@ class MCPServer:
         self.capabilities = capabilities
         self.context = ServerContext(self.settings, capabilities=capabilities)
         self.server = create_server(self.settings, capabilities, self.context)
-        
+        self._context_initialized = False
+
         def on_initialized():
-            if hasattr(self.server, '_session') and hasattr(self.server._session, 'client_info'):
+            if hasattr(self.server, "_session") and hasattr(
+                self.server._session, "client_info"
+            ):
                 client_info = self.server._session.client_info
                 if client_info:
                     self.context.clientVersion = {
                         "name": client_info.name,
-                        "version": client_info.version
+                        "version": client_info.version,
                     }
-        
-        if hasattr(self.server, 'set_initialized_callback'):
+
+        if hasattr(self.server, "set_initialized_callback"):
             self.server.set_initialized_callback(on_initialized)
 
-    def create_initialization_options(self) -> InitializationOptions:
-        
+    async def _ensure_context_started(self):
+        """Ensure browser context is initialized"""
+        if not self._context_initialized:
+            await self.context.start()
+            self._context_initialized = True
+            logger.info("Browser context initialized successfully")
 
+    def create_initialization_options(self) -> InitializationOptions:
         return InitializationOptions(
             server_name="mcp-automation-server",
             server_version="1.0.0",
             capabilities=ServerCapabilities(
-                tools={"listChanged": True}, 
+                tools={"listChanged": True},
                 prompts={"listChanged": True},
                 resources={"subscribe": True, "listChanged": True},
-                logging={}
+                logging={},
             ),
         )
-    
+
     def setup_exit_watchdog(self):
-        
         def handle_exit():
             logger.info("Server shutting down...")
             try:
@@ -192,20 +200,17 @@ class MCPServer:
             except Exception as e:
                 logger.error(f"Error during shutdown: {e}")
             sys.exit(0)
-        
+
         signal.signal(signal.SIGINT, lambda s, f: handle_exit())
         signal.signal(signal.SIGTERM, lambda s, f: handle_exit())
 
     async def run_stdio(self):
-
         async with stdio_server() as (read_stream, write_stream):
             await self.server.run(
                 read_stream, write_stream, self.create_initialization_options()
             )
 
     async def run_websocket(self, host: str = "localhost", port: int = 8765):
-        
-
         async def websocket_endpoint(websocket):
             await websocket.accept()
             async with websocket_server(
@@ -222,7 +227,6 @@ class MCPServer:
         await server.serve()
 
     async def run_sse(self, host: str = "localhost", port: int = 8080):
-
         logging.getLogger("mcp").setLevel(logging.INFO)
         logging.getLogger("mcp.server").setLevel(logging.INFO)
         logging.getLogger("mcp.server.session").setLevel(logging.INFO)
@@ -230,7 +234,6 @@ class MCPServer:
         sse_transport = SseServerTransport("/messages")
 
         async def handle_sse(request):
-            
             logger.info("New SSE connection established")
             try:
                 async with sse_transport.connect_sse(
@@ -250,31 +253,36 @@ class MCPServer:
             return Response()
 
         async def handle_messages(scope, receive, send):
-            
             await sse_transport.handle_post_message(scope, receive, send)
 
         async def health_endpoint(request):
-            return JSONResponse({
-                "status": "ok",
-                "service": "mcp-automation-server", 
-                "version": "1.0.0",
-                "transport": "sse"
-            })
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "service": "mcp-automation-server",
+                    "version": "1.0.0",
+                    "transport": "sse",
+                }
+            )
 
         async def root_endpoint(request):
-            return JSONResponse({
-                "service": "MCP Automation Server",
-                "version": "1.0.0",
-                "transport": "sse",
-                "status": "running",
-                "endpoints": {
-                    "health": "/health",
-                    "sse": "/sse",
-                    "messages": "/messages"
-                },
-                "capabilities": self.context.capabilities if hasattr(self.context, 'capabilities') else [],
-                "description": "Model Context Protocol Server for Browser Automation"
-            })
+            return JSONResponse(
+                {
+                    "service": "MCP Automation Server",
+                    "version": "1.0.0",
+                    "transport": "sse",
+                    "status": "running",
+                    "endpoints": {
+                        "health": "/health",
+                        "sse": "/sse",
+                        "messages": "/messages",
+                    },
+                    "capabilities": self.context.capabilities
+                    if hasattr(self.context, "capabilities")
+                    else [],
+                    "description": "Model Context Protocol Server for Browser Automation",
+                }
+            )
 
         app = Starlette(
             routes=[
@@ -283,22 +291,27 @@ class MCPServer:
                 Route("/health", endpoint=health_endpoint, methods=["GET"]),
             ]
         )
-        
+
         original_app = app
-        
+
         async def app_with_messages(scope, receive, send):
-            if scope["type"] == "http" and scope["path"] == "/messages" and scope["method"] == "POST":
+            if (
+                scope["type"] == "http"
+                and scope["path"] == "/messages"
+                and scope["method"] == "POST"
+            ):
                 await handle_messages(scope, receive, send)
             else:
                 await original_app(scope, receive, send)
 
         logger.info(f"Starting SSE server on {host}:{port}")
-        config = uvicorn.Config(app_with_messages, host=host, port=port, log_level="info")
+        config = uvicorn.Config(
+            app_with_messages, host=host, port=port, log_level="info"
+        )
         server = uvicorn.Server(config)
         await server.serve()
 
     async def run_http(self, host: str = "localhost", port: int = 8080):
-
         transport = StreamableHTTPServerTransport(
             mcp_session_id=None, is_json_response_enabled=True
         )
@@ -315,26 +328,29 @@ class MCPServer:
             )
 
         async def health_endpoint(request):
-            return JSONResponse({
-                "status": "ok", 
-                "service": "mcp-automation-server",
-                "version": "1.0.0",
-                "transport": "http"
-            })
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "service": "mcp-automation-server",
+                    "version": "1.0.0",
+                    "transport": "http",
+                }
+            )
 
         async def root_endpoint(request):
-            return JSONResponse({
-                "service": "MCP Automation Server",
-                "version": "1.0.0",
-                "transport": "http",
-                "status": "running",
-                "endpoints": {
-                    "health": "/health",
-                    "mcp": "/mcp"
-                },
-                "capabilities": self.context.capabilities if hasattr(self.context, 'capabilities') else [],
-                "description": "Model Context Protocol Server for Browser Automation"
-            })
+            return JSONResponse(
+                {
+                    "service": "MCP Automation Server",
+                    "version": "1.0.0",
+                    "transport": "http",
+                    "status": "running",
+                    "endpoints": {"health": "/health", "mcp": "/mcp"},
+                    "capabilities": self.context.capabilities
+                    if hasattr(self.context, "capabilities")
+                    else [],
+                    "description": "Model Context Protocol Server for Browser Automation",
+                }
+            )
 
         app = Starlette(
             routes=[

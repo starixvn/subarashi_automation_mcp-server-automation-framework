@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class Tab:
-
     def __init__(self, page: Page):
         self.page = page
         self.console_messages: List[Dict[str, Any]] = []
@@ -84,22 +83,21 @@ class Tab:
 
     async def navigate(self, url: str) -> str:
         self._clear_collected_artifacts()
-        
+
         try:
             await self.page.goto(url, wait_until="domcontentloaded")
         except Exception as e:
-            might_be_download = (
-                "net::ERR_ABORTED" in str(e) or
-                "Download is starting" in str(e)
-            )
+            might_be_download = "net::ERR_ABORTED" in str(
+                e
+            ) or "Download is starting" in str(e)
             if not might_be_download:
                 raise e
-        
+
         try:
-            await self.wait_for_load_state('load', timeout=5000)
+            await self.wait_for_load_state("load", timeout=5000)
         except Exception:
             pass
-            
+
         return self.page.url
 
     async def title(self) -> str:
@@ -214,14 +212,16 @@ class Tab:
         self.console_messages.clear()
         self.network_requests.clear()
 
-    async def wait_for_load_state(self, state: str = 'load', timeout: Optional[int] = None) -> None:
+    async def wait_for_load_state(
+        self, state: str = "load", timeout: Optional[int] = None
+    ) -> None:
         try:
             if timeout:
                 await self.page.wait_for_load_state(state, timeout=timeout)
             else:
                 await self.page.wait_for_load_state(state)
         except Exception:
-            pass    
+            pass
 
     async def capture_snapshot(self, include_screenshot: bool = True) -> PageSnapshot:
         snapshot = PageSnapshot(self.page)

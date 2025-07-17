@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 
 class ToolCapability(str, Enum):
-
     CORE = "core"
     VISION = "vision"
     TABS = "tabs"
@@ -28,13 +27,11 @@ class ToolCapability(str, Enum):
 
 
 class ToolType(str, Enum):
-
     READ_ONLY = "readOnly"
     DESTRUCTIVE = "destructive"
 
 
 class ToolInputSchema(BaseModel):
-
     class Config:
         extra = "forbid"
         validate_assignment = True
@@ -42,13 +39,11 @@ class ToolInputSchema(BaseModel):
 
 @dataclass
 class ToolActionResult:
-
     content: Optional[List[Dict[str, Any]]] = None
 
 
 @dataclass
 class ToolResult:
-
     code: List[str]
     action: Optional[Callable[[], Awaitable[ToolActionResult]]] = None
     capture_snapshot: bool = False
@@ -58,7 +53,6 @@ class ToolResult:
 
 @dataclass
 class ToolSchema:
-
     name: str
     title: str
     description: str
@@ -67,19 +61,17 @@ class ToolSchema:
 
 
 class ModalStateType(str, Enum):
-
     DIALOG = "dialog"
     FILE_CHOOSER = "fileChooser"
 
 
 @dataclass
 class Tool:
-
     capability: ToolCapability
     schema: ToolSchema
     handle: Callable[["ServerContext", Dict[str, Any]], Awaitable[ToolResult]]
     clears_modal_state: Optional[str] = None
-    browser_independent: bool = False  # Flag for tools that don't need browser context
+    browser_independent: bool = False
 
 
 ToolFactory = Callable[[bool], Tool]
@@ -94,7 +86,6 @@ def define_tool(
     tool_type: ToolType = ToolType.READ_ONLY,
     clears_modal_state: Optional[ModalStateType] = None,
 ) -> Callable[[Callable], Tool]:
-
     def decorator(
         func: Callable[["ServerContext", Dict[str, Any]], Awaitable[ToolResult]],
     ) -> Tool:
@@ -125,7 +116,6 @@ def define_tool_factory(
     tool_type: ToolType = ToolType.READ_ONLY,
     clears_modal_state: Optional[ModalStateType] = None,
 ) -> Callable[[Callable], ToolFactory]:
-
     def decorator(factory_func: Callable[[bool], Tool]) -> ToolFactory:
         return factory_func
 
@@ -135,7 +125,6 @@ def define_tool_factory(
 def validate_tool_input(
     input_schema: type[ToolInputSchema], params: Dict[str, Any]
 ) -> ToolInputSchema:
-    """Validate tool input parameters using Pydantic."""
     try:
         return input_schema(**params)
     except ValidationError as e:

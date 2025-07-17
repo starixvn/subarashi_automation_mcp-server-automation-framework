@@ -9,446 +9,449 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tests.conftest import assert_text_content, assert_contains_text_content
 from context import ServerContext
 from config.settings import Config, get_default_config, config_to_settings
-
-
-@pytest.mark.asyncio
-async def test_browser_wait_for_time():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Wait for 3 seconds
-await page.waitForTimeout(3000);
-```
-
-Waited for 3 seconds successfully.
-""",
-                }
-            ]
-
-            result = await registry.execute_tool("browser_wait_for", {"time": 3})
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Wait for 3 seconds" in text_content
-            assert "Waited for 3 seconds successfully" in text_content
+from tools.wait import get_wait_tools
+from services.wait_service import WaitService
+from services.base_service import ServiceResult
 
 
 @pytest.mark.asyncio
 async def test_browser_wait_for_text():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test waiting for text to appear
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Text 'Loading complete' appeared on page",
+        data={"text": "Loading complete", "found": True},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Wait for text "Loading complete" to appear
-await page.waitForSelector('text=Loading complete', { timeout: 30000 });
-```
+    with patch.object(WaitService, "wait_for_text", return_value=mock_service_result):
+        result = await wait_for_tool.handle(mock_context, {"text": "Loading complete"})
 
-Text "Loading complete" appeared successfully.
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == [
+            "# Wait for text 'Loading complete' to appear",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_wait_for", {"text": "Loading complete"}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Wait for text \"Loading complete\"" in text_content
-            assert "Text \"Loading complete\" appeared successfully" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Loading complete" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_browser_wait_for_text_gone():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test waiting for text to disappear
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Text 'Loading...' disappeared from page",
+        data={"text_gone": "Loading...", "disappeared": True},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Wait for text "Loading..." to disappear
-await page.waitForSelector('text=Loading...', { state: 'detached', timeout: 30000 });
-```
+    with patch.object(
+        WaitService, "wait_for_text_gone", return_value=mock_service_result
+    ):
+        result = await wait_for_tool.handle(mock_context, {"text_gone": "Loading..."})
 
-Text "Loading..." disappeared successfully.
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == [
+            "# Wait for text 'Loading...' to disappear",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_wait_for", {"text_gone": "Loading..."}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Wait for text \"Loading...\" to disappear" in text_content
-            assert "Text \"Loading...\" disappeared successfully" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Loading..." in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_wait_for_selector_visible():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_wait_for_time():
+    # Test waiting for specific time
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Waited for 2.5 seconds",
+        data={"time": 2.5, "elapsed": 2.5},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Wait for selector .modal-dialog to appear (timeout: 10 seconds)
-await page.waitForSelector('.modal-dialog', { timeout: 10000 });
-```
+    with patch.object(
+        WaitService, "wait_for_timeout", return_value=mock_service_result
+    ):
+        result = await wait_for_tool.handle(mock_context, {"time": 2.5})
 
-Element with selector '.modal-dialog' appeared successfully.
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == [
+            "# Wait for 2.5 seconds",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_wait_for_selector",
-                {"selector": ".modal-dialog", "timeout": 10},
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Wait for selector .modal-dialog to appear" in text_content
-            assert "timeout: 10 seconds" in text_content
-            assert "Element with selector '.modal-dialog' appeared successfully" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "2.5 seconds" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_wait_for_selector_default_timeout():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_wait_for_selector():
+    # Test waiting for selector to appear
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_selector_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for_selector"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Element found: #submit-button",
+        data={"selector": "#submit-button", "found": True, "timeout": 10},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Wait for selector button.submit to appear (timeout: 10 seconds)
-await page.waitForSelector('button.submit', { timeout: 10000 });
-```
+    with patch.object(
+        WaitService, "wait_for_selector", return_value=mock_service_result
+    ):
+        result = await wait_for_selector_tool.handle(
+            mock_context, {"selector": "#submit-button", "timeout": 10}
+        )
 
-Element with selector 'button.submit' appeared successfully.
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == [
+            "# Wait for element to appear",
+            "# Selector: '#submit-button'",
+            "# Timeout: 10.0 seconds",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_wait_for_selector", {"selector": "button.submit"}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Wait for selector button.submit to appear" in text_content
-            assert "timeout: 10 seconds" in text_content
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Element found: #submit-button" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
-async def test_browser_wait_for_multiple_conditions():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_wait_for_selector_with_timeout():
+    # Test waiting for selector with custom timeout
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_selector_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for_selector"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Element found: .loading-spinner",
+        data={"selector": ".loading-spinner", "found": True, "timeout": 30},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.return_value = MagicMock()
-            mock_execute.return_value.content = [
-                {
-                    "type": "text",
-                    "text": """
-- Ran Playwright code:
-```js
-// Wait for text "Data loaded" to appear and time 2 seconds
-await Promise.all([
-  page.waitForSelector('text=Data loaded', { timeout: 30000 }),
-  page.waitForTimeout(2000)
-]);
-```
+    with patch.object(
+        WaitService, "wait_for_selector", return_value=mock_service_result
+    ):
+        result = await wait_for_selector_tool.handle(
+            mock_context, {"selector": ".loading-spinner", "timeout": 30}
+        )
 
-Multiple conditions met:
-- Text "Data loaded" appeared
-- Waited for 2 seconds
-""",
-                }
-            ]
+        # Test ToolResult structure
+        assert result.code == [
+            "# Wait for element to appear",
+            "# Selector: '.loading-spinner'",
+            "# Timeout: 30.0 seconds",
+        ]
+        assert result.capture_snapshot is False
+        assert result.wait_for_network is False
+        assert result.action is not None
 
-            result = await registry.execute_tool(
-                "browser_wait_for", {"text": "Data loaded", "time": 2}
-            )
-
-            assert hasattr(result, "content")
-            assert result.content is not None
-            text_content = ""
-            for item in result.content:
-                if item.get("type") == "text":
-                    text_content += item.get("text", "")
-
-            assert "Multiple conditions met" in text_content
-            assert "Text \"Data loaded\" appeared" in text_content
-            assert "Waited for 2 seconds" in text_content
-
-
-@pytest.mark.asyncio
-async def test_browser_wait_for_timeout_error():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.side_effect = Exception(
-                "Timeout: Element with selector '#non-existent' not found"
-            )
-
-            with pytest.raises(
-                Exception, match="Timeout: Element with selector '#non-existent' not found"
-            ):
-                await registry.execute_tool(
-                    "browser_wait_for_selector",
-                    {"selector": "#non-existent", "timeout": 1},
-                )
+        # Test action execution
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert "Element found: .loading-spinner" in action_result.content[0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_browser_wait_for_text_timeout():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+    # Test error handling when text wait times out
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Timeout waiting for text 'Non-existent text'",
+        error="Timeout",
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        with patch.object(registry, "execute_tool") as mock_execute:
-            mock_execute.side_effect = Exception(
-                "Timeout: Text 'Never appears' not found"
-            )
+    with patch.object(WaitService, "wait_for_text", return_value=mock_service_result):
+        result = await wait_for_tool.handle(mock_context, {"text": "Non-existent text"})
 
-            with pytest.raises(Exception, match="Timeout: Text 'Never appears' not found"):
-                await registry.execute_tool(
-                    "browser_wait_for", {"text": "Never appears"}
-                )
-
-
-@pytest.mark.asyncio
-async def test_browser_wait_for_selector_states():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
-
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
-
-        context = ServerContext(settings)
-        registry = context.tool_registry
-
-        states = ["visible", "hidden", "attached", "detached"]
-
-        for state in states:
-            with patch.object(registry, "execute_tool") as mock_execute:
-                mock_execute.return_value = MagicMock()
-                mock_execute.return_value.content = [
-                    {
-                        "type": "text",
-                        "text": f"""
-- Ran Playwright code:
-```js
-// Wait for selector .element to be {state} (timeout: 10 seconds)
-await page.waitForSelector('.element', {{ state: '{state}', timeout: 10000 }});
-```
-
-Element with selector '.element' is now {state}.
-""",
-                    }
-                ]
-
-                result = await registry.execute_tool(
-                    "browser_wait_for_selector",
-                    {"selector": ".element", "state": state, "timeout": 10},
-                )
-
-                assert hasattr(result, "content")
-                assert result.content is not None
-                text_content = ""
-                for item in result.content:
-                    if item.get("type") == "text":
-                        text_content += item.get("text", "")
-
-                assert f"Wait for selector .element to be {state}" in text_content
-                assert f"Element with selector '.element' is now {state}" in text_content
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Timeout waiting for text 'Non-existent text'"
+            in action_result.content[0]["text"]
+        )
 
 
 @pytest.mark.asyncio
-async def test_browser_wait_for_complex_selectors():
-    default_config = get_default_config()
-    settings = config_to_settings(default_config)
+async def test_browser_wait_for_selector_timeout():
+    # Test error handling when selector wait times out
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_selector_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for_selector"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Mock service error result
+    mock_service_result = ServiceResult(
+        success=False,
+        message="Timeout waiting for selector '#non-existent'",
+        error="Timeout",
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    # Create mock context
+    mock_context = MagicMock()
 
-        complex_selectors = [
-            'div[data-testid="loading-spinner"]',
-            'button:has-text("Submit"):visible',
-            '.modal.open .close-button',
-            'input[type="email"]:focus',
+    with patch.object(
+        WaitService, "wait_for_selector", return_value=mock_service_result
+    ):
+        result = await wait_for_selector_tool.handle(
+            mock_context, {"selector": "#non-existent", "timeout": 5}
+        )
+
+        # Test action execution with error
+        action_result = await result.action()
+        assert action_result.content[0]["type"] == "text"
+        assert (
+            "Timeout waiting for selector '#non-existent'"
+            in action_result.content[0]["text"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_browser_wait_for_multiple_conditions():
+    # Test waiting with multiple conditions
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for"
+    )
+
+    # Mock service results
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Text appeared successfully",
+        data={"text": "Success", "found": True},
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(WaitService, "wait_for_text", return_value=mock_service_result):
+        result = await wait_for_tool.handle(
+            mock_context, {"text": "Success", "time": 1.0}
+        )
+
+        # Test ToolResult structure with multiple conditions
+        assert result.code == [
+            "# Wait for 1.0 seconds",
+            "# Wait for text 'Success' to appear",
         ]
 
-        for selector in complex_selectors:
-            with patch.object(registry, "execute_tool") as mock_execute:
-                mock_execute.return_value = MagicMock()
-                mock_execute.return_value.content = [
-                    {
-                        "type": "text",
-                        "text": f"""
-- Ran Playwright code:
-```js
-// Wait for selector {selector} to appear (timeout: 10 seconds)
-await page.waitForSelector('{selector}', {{ timeout: 10000 }});
-```
 
-Element with selector '{selector}' appeared successfully.
-""",
-                    }
-                ]
+@pytest.mark.asyncio
+async def test_browser_wait_for_short_time():
+    # Test waiting for short time period
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for"
+    )
 
-                result = await registry.execute_tool(
-                    "browser_wait_for_selector", {"selector": selector}
-                )
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True, message="Waited for 0.5 seconds", data={"time": 0.5}
+    )
 
-                assert hasattr(result, "content")
-                assert result.content is not None
-                text_content = ""
-                for item in result.content:
-                    if item.get("type") == "text":
-                        text_content += item.get("text", "")
+    # Create mock context
+    mock_context = MagicMock()
 
-                assert f"Wait for selector {selector} to appear" in text_content
-                assert f"Element with selector '{selector}' appeared successfully" in text_content
+    with patch.object(
+        WaitService, "wait_for_timeout", return_value=mock_service_result
+    ):
+        result = await wait_for_tool.handle(mock_context, {"time": 0.5})
+
+        # Test ToolResult structure
+        assert result.code == ["# Wait for 0.5 seconds"]
+
+
+@pytest.mark.asyncio
+async def test_browser_wait_for_long_time():
+    # Test waiting for longer time period
+    wait_tools = get_wait_tools(capture_snapshot=False)
+    wait_for_tool = next(
+        tool for tool in wait_tools if tool.schema.name == "browser_wait_for"
+    )
+
+    # Mock service result
+    mock_service_result = ServiceResult(
+        success=True, message="Waited for 30 seconds", data={"time": 30}
+    )
+
+    # Create mock context
+    mock_context = MagicMock()
+
+    with patch.object(
+        WaitService, "wait_for_timeout", return_value=mock_service_result
+    ):
+        result = await wait_for_tool.handle(mock_context, {"time": 30})
+
+        # Test ToolResult structure
+        assert result.code == ["# Wait for 30.0 seconds"]
 
 
 @pytest.mark.asyncio
 async def test_wait_capability_filtering():
-    config = Config(
-        browser=get_default_config().browser,
-        server=get_default_config().server,
-        network=get_default_config().network,
-        capabilities=["core", "wait"],
+    # Test that wait tools have proper capability filtering
+    wait_tools = get_wait_tools(capture_snapshot=False)
+
+    # Check that we have the expected wait tools
+    tool_names = [tool.schema.name for tool in wait_tools]
+    expected_tools = ["browser_wait_for", "browser_wait_for_selector"]
+
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing wait tool: {expected_tool}"
+
+    # Check that all tools have WAIT capability
+    from core.tool_schema import ToolCapability
+
+    for tool in wait_tools:
+        assert tool.capability == ToolCapability.WAIT
+
+
+@pytest.mark.asyncio
+async def test_wait_tools_capture_snapshot_parameter():
+    # Test that wait tools respect capture_snapshot parameter
+    tools_with_snapshot = get_wait_tools(capture_snapshot=True)
+    tools_without_snapshot = get_wait_tools(capture_snapshot=False)
+
+    # Find wait for tool in both sets
+    wait_for_with_snapshot = next(
+        tool for tool in tools_with_snapshot if tool.schema.name == "browser_wait_for"
     )
-    settings = config_to_settings(config)
+    wait_for_without_snapshot = next(
+        tool
+        for tool in tools_without_snapshot
+        if tool.schema.name == "browser_wait_for"
+    )
 
-    with patch("playwright.async_api.async_playwright") as mock_playwright:
-        mock_playwright_instance = AsyncMock()
-        mock_playwright.return_value.__aenter__.return_value = mock_playwright_instance
+    # Create mock context and service result
+    mock_context = MagicMock()
+    mock_service_result = ServiceResult(
+        success=True,
+        message="Waited successfully",
+        data={"time": 1.0, "elapsed": 1.0},
+    )
 
-        context = ServerContext(settings)
-        registry = context.tool_registry
+    with patch.object(
+        WaitService, "wait_for_timeout", return_value=mock_service_result
+    ):
+        result_with_snapshot = await wait_for_with_snapshot.handle(
+            mock_context, {"time": 1.0}
+        )
+        result_without_snapshot = await wait_for_without_snapshot.handle(
+            mock_context, {"time": 1.0}
+        )
 
-        tools = await registry.list_tools()
-        tool_names = {tool["name"] for tool in tools}
+        assert result_with_snapshot.capture_snapshot is True
+        assert result_without_snapshot.capture_snapshot is False
 
-        assert "browser_wait_for" in tool_names
-        assert "browser_wait_for_selector" in tool_names 
+
+@pytest.mark.asyncio
+async def test_wait_tools_schema_validation():
+    # Test that wait tools have proper schema validation
+    wait_tools = get_wait_tools(capture_snapshot=False)
+
+    for tool in wait_tools:
+        assert tool.schema.name is not None
+        assert tool.schema.title is not None
+        assert tool.schema.description is not None
+        assert tool.schema.input_schema is not None
+        assert tool.schema.tool_type is not None
+        assert tool.handle is not None
+        assert tool.capability is not None
+
+        # Test that wait tools have read-only type
+        from core.tool_schema import ToolType
+
+        assert tool.schema.tool_type == ToolType.READ_ONLY
+
+
+@pytest.mark.asyncio
+async def test_wait_tools_network_settings():
+    # Test that wait tools have proper network settings
+    wait_tools = get_wait_tools(capture_snapshot=False)
+
+    for tool in wait_tools:
+        mock_context = MagicMock()
+        mock_service_result = ServiceResult(
+            success=True, message="Wait completed", data={}
+        )
+
+        with patch.object(
+            WaitService, "wait_for_timeout", return_value=mock_service_result
+        ):
+            with patch.object(
+                WaitService, "wait_for_text", return_value=mock_service_result
+            ):
+                with patch.object(
+                    WaitService, "wait_for_selector", return_value=mock_service_result
+                ):
+                    if tool.schema.name == "browser_wait_for":
+                        result = await tool.handle(mock_context, {"time": 1.0})
+                    else:
+                        result = await tool.handle(
+                            mock_context, {"selector": "#test", "timeout": 10}
+                        )
+
+                    # Wait operations shouldn't wait for network
+                    assert result.wait_for_network is False

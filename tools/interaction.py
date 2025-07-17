@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool,
     define_tool_factory,
     ToolCapability,
@@ -9,7 +9,7 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import (
+from core.schemas import (
     EmptyInputSchema,
     ClickInputSchema,
     TypeInputSchema,
@@ -19,22 +19,10 @@ from .schemas import (
     WaitForSelectorInputSchema,
     DragInputSchema,
 )
+from services.interaction_service import InteractionService
 
 if TYPE_CHECKING:
     from ..context import ServerContext
-
-
-
-async def generate_locator_string(locator) -> str:
-    try:
-        if hasattr(locator, "_generate_locator_string"):
-            return await locator._generate_locator_string()
-        elif hasattr(locator, "locator"):
-            return str(locator)
-        else:
-            return f"locator('{locator}')"
-    except Exception:
-        return f"locator('{locator}')"
 
 
 @define_tool_factory(
@@ -49,30 +37,26 @@ def browser_click_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = ClickInputSchema(**params)
 
-        tab = context.current_tab_or_die()
-        snapshot = tab.snapshot_or_die()
+        service = InteractionService(context)
 
-        locator = snapshot.ref_locator(
-            {"element": validated_params.element, "ref": validated_params.ref}
-        )
-
-        locator_string = await generate_locator_string(locator)
+        element_ref = {"element": validated_params.element, "ref": validated_params.ref}
 
         code = [
-            f"// Click {validated_params.element}",
-            f"await page.{locator_string}.click();",
+            f"# Click on {validated_params.element}",
+            f"# Using element reference: {validated_params.ref}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                await locator.click()
+            result = await service.click_element(element_ref)
+
+            if result.success:
                 return ToolActionResult(content=[])
-            except Exception as e:
+            else:
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": f"Failed to click {validated_params.element}: {str(e)}",
+                            "text": result.message,
                         }
                     ]
                 )
@@ -107,49 +91,37 @@ def browser_type_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = TypeInputSchema(**params)
 
-        tab = context.current_tab_or_die()
-        snapshot = tab.snapshot_or_die()
+        service = InteractionService(context)
 
-        locator = snapshot.ref_locator(
-            {"element": validated_params.element, "ref": validated_params.ref}
-        )
+        element_ref = {"element": validated_params.element, "ref": validated_params.ref}
 
-        locator_string = await generate_locator_string(locator)
-
-        code = []
-        steps = []
+        code = [
+            f"# Type text into {validated_params.element}",
+            f"# Text: '{validated_params.text}'",
+        ]
 
         if validated_params.slowly:
-            code.append(
-                f'// Press "{validated_params.text}" sequentially into "{validated_params.element}"'
-            )
-            code.append(
-                f"await page.{locator_string}.pressSequentially('{validated_params.text}');"
-            )
-            steps.append(lambda: locator.press_sequentially(validated_params.text))
-        else:
-            code.append(
-                f'// Fill "{validated_params.text}" into "{validated_params.element}"'
-            )
-            code.append(f"await page.{locator_string}.fill('{validated_params.text}');")
-            steps.append(lambda: locator.fill(validated_params.text))
+            code.append("# Using slow typing (press sequentially)")
 
         if validated_params.submit:
-            code.append("// Submit text")
-            code.append(f"await page.{locator_string}.press('Enter');")
-            steps.append(lambda: locator.press("Enter"))
+            code.append("# Submit after typing (press Enter)")
 
         async def action() -> ToolActionResult:
-            try:
-                for step in steps:
-                    await step()
+            result = await service.type_text(
+                element_ref,
+                validated_params.text,
+                slowly=validated_params.slowly,
+                submit=validated_params.submit,
+            )
+
+            if result.success:
                 return ToolActionResult(content=[])
-            except Exception as e:
+            else:
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": f"Failed to type into {validated_params.element}: {str(e)}",
+                            "text": result.message,
                         }
                     ]
                 )
@@ -184,40 +156,26 @@ def browser_hover_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = HoverInputSchema(**params)
 
-        tab = context.current_tab_or_die()
-        snapshot = tab.snapshot_or_die()
+        service = InteractionService(context)
 
-        locator = snapshot.ref_locator(
-            {"element": validated_params.element, "ref": validated_params.ref}
-        )
-
-        locator_string = await generate_locator_string(locator)
+        element_ref = {"element": validated_params.element, "ref": validated_params.ref}
 
         code = [
-            f"// Hover over {validated_params.element}",
-            f"await page.{locator_string}.hover();",
+            f"# Hover over {validated_params.element}",
+            f"# Using element reference: {validated_params.ref}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                await locator.hover()
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Hovered over {validated_params.element}",
-                        }
-                    ]
-                )
-            except Exception as e:
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Failed to hover over {validated_params.element}: {str(e)}",
-                        }
-                    ]
-                )
+            result = await service.hover_element(element_ref)
+
+            return ToolActionResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": result.message,
+                    }
+                ]
+            )
 
         return ToolResult(
             code=code,
@@ -249,40 +207,26 @@ def browser_select_option_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = SelectOptionInputSchema(**params)
 
-        tab = context.current_tab_or_die()
-        snapshot = tab.snapshot_or_die()
+        service = InteractionService(context)
 
-        locator = snapshot.ref_locator(
-            {"element": validated_params.element, "ref": validated_params.ref}
-        )
-
-        locator_string = await generate_locator_string(locator)
+        element_ref = {"element": validated_params.element, "ref": validated_params.ref}
 
         code = [
-            f"// Select options {validated_params.values} in {validated_params.element}",
-            f"await page.{locator_string}.selectOption({validated_params.values});",
+            f"# Select options in {validated_params.element}",
+            f"# Values: {validated_params.values}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                await locator.select_option(validated_params.values)
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Selected {validated_params.values} in {validated_params.element}",
-                        }
-                    ]
-                )
-            except Exception as e:
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Failed to select option in {validated_params.element}: {str(e)}",
-                        }
-                    ]
-                )
+            result = await service.select_option(element_ref, validated_params.values)
+
+            return ToolActionResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": result.message,
+                    }
+                ]
+            )
 
         return ToolResult(
             code=code,
@@ -314,30 +258,31 @@ def browser_get_text_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = GetTextInputSchema(**params)
 
-        tab = context.current_tab_or_die()
+        service = InteractionService(context)
 
         code = [
-            f"// Get text from '{validated_params.selector}'",
-            f"const text = await page.textContent('{validated_params.selector}');",
+            f"# Get text content from element",
+            f"# Selector: '{validated_params.selector}'",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                text = await tab.page.text_content(validated_params.selector)
+            result = await service.get_text_content(validated_params.selector)
+
+            if result.success:
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": f"Text content: {text or '(empty)'}",
+                            "text": f"Text content: {result.data['text']}",
                         }
                     ]
                 )
-            except Exception as e:
+            else:
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": f"Failed to get text from {validated_params.selector}: {str(e)}",
+                            "text": result.message,
                         }
                     ]
                 )
@@ -372,44 +317,34 @@ def browser_drag_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
         validated_params = DragInputSchema(**params)
 
-        tab = context.current_tab_or_die()
-        snapshot = tab.snapshot_or_die()
+        service = InteractionService(context)
 
-        start_locator = snapshot.ref_locator(
-            {"element": validated_params.start_element, "ref": validated_params.start_ref}
-        )
-        end_locator = snapshot.ref_locator(
-            {"element": validated_params.end_element, "ref": validated_params.end_ref}
-        )
-
-        start_locator_string = await generate_locator_string(start_locator)
-        end_locator_string = await generate_locator_string(end_locator)
+        start_ref = {
+            "element": validated_params.start_element,
+            "ref": validated_params.start_ref,
+        }
+        end_ref = {
+            "element": validated_params.end_element,
+            "ref": validated_params.end_ref,
+        }
 
         code = [
-            f"// Drag from {validated_params.start_element} to {validated_params.end_element}",
-            f"await page.{start_locator_string}.dragTo(page.{end_locator_string});",
+            f"# Drag element from {validated_params.start_element} to {validated_params.end_element}",
+            f"# Start ref: {validated_params.start_ref}",
+            f"# End ref: {validated_params.end_ref}",
         ]
 
         async def action() -> ToolActionResult:
-            try:
-                await start_locator.drag_to(end_locator)
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Dragged from {validated_params.start_element} to {validated_params.end_element}",
-                        }
-                    ]
-                )
-            except Exception as e:
-                return ToolActionResult(
-                    content=[
-                        {
-                            "type": "text",
-                            "text": f"Failed to drag: {str(e)}",
-                        }
-                    ]
-                )
+            result = await service.drag_element(start_ref, end_ref)
+
+            return ToolActionResult(
+                content=[
+                    {
+                        "type": "text",
+                        "text": result.message,
+                    }
+                ]
+            )
 
         return ToolResult(
             code=code,

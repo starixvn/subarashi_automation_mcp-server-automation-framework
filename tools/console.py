@@ -1,5 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
-from .tool_schema import (
+from core.tool_schema import (
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -8,10 +8,11 @@ from .tool_schema import (
     Tool,
     ToolSchema,
 )
-from .schemas import EmptyInputSchema
+from core.schemas import EmptyInputSchema
+from services.console_service import ConsoleService
 
 if TYPE_CHECKING:
-    from ..context import ServerContext
+    from context import ServerContext
 
 
 @define_tool_factory(
@@ -24,20 +25,21 @@ if TYPE_CHECKING:
 )
 def browser_console_clear_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
-        tab = context.current_tab_or_die()
-        
+        service = ConsoleService(context)
+
         code = [
-            "// Clear console messages",
-            "console.clear();",
+            "# Clear browser console messages",
+            "# Removes all console entries",
         ]
 
         async def action() -> ToolActionResult:
-            tab.clear_console_messages()
+            result = await service.clear_console()
+
             return ToolActionResult(
                 content=[
                     {
                         "type": "text",
-                        "text": "Console messages cleared",
+                        "text": result.message,
                     }
                 ]
             )
@@ -70,35 +72,50 @@ def browser_console_clear_factory(capture_snapshot: bool) -> Tool:
 )
 def browser_console_messages_factory(capture_snapshot: bool) -> Tool:
     async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
-        tab = context.current_tab_or_die()
-        
-        code = ["// Get console messages"]
+        service = ConsoleService(context)
+
+        code = [
+            "# Get browser console messages",
+            "# Returns all console entries (log, warn, error, etc.)",
+        ]
 
         async def action() -> ToolActionResult:
-            messages = tab.get_console_messages()
-            
-            if not messages:
+            result = await service.get_console_messages()
+
+            if result.success:
+                messages = result.data.get("messages", [])
+
+                if not messages:
+                    return ToolActionResult(
+                        content=[
+                            {
+                                "type": "text",
+                                "text": "No console messages",
+                            }
+                        ]
+                    )
+
+                lines = ["### Console Messages"]
+                for msg in messages:
+                    lines.append(f"- **{msg['type']}**: {msg['text']}")
+
                 return ToolActionResult(
                     content=[
                         {
                             "type": "text",
-                            "text": "No console messages",
+                            "text": "\n".join(lines),
                         }
                     ]
                 )
-
-            lines = ["### Console Messages"]
-            for msg in messages:
-                lines.append(f"- **{msg['type']}**: {msg['text']}")
-            
-            return ToolActionResult(
-                content=[
-                    {
-                        "type": "text",
-                        "text": "\n".join(lines),
-                    }
-                ]
-            )
+            else:
+                return ToolActionResult(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": result.message,
+                        }
+                    ]
+                )
 
         return ToolResult(
             code=code,
@@ -122,6 +139,7 @@ def get_console_tools(capture_snapshot: bool = True) -> list[Tool]:
     return [
         browser_console_clear_factory(capture_snapshot),
         browser_console_messages_factory(capture_snapshot),
-    ] 
+    ]
+
 
 CONSOLE_TOOLS = get_console_tools()

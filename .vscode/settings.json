@@ -40,5 +40,7 @@
         "reportPrivateImportUsage": "none",
         "reportUnboundVariable": "none",
         "reportMissingImports": "none"
-    }
+    },
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

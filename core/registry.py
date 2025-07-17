@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
-from .tool_schema import (
+from core.tool_schema import (
     Tool,
     ToolCapability,
     ToolResult,
@@ -11,29 +11,29 @@ from .tool_schema import (
     validate_tool_input,
 )
 
-from .core import get_core_tools
-from .interaction import get_interaction_tools
-from .vision import get_vision_tools
-from .tabs import get_tab_tools
-from .dialogs import get_dialog_tools
-from .console import get_console_tools
-from .keyboard import get_keyboard_tools
-from .network import get_network_tools
-from .files import get_file_tools
-from .wait import get_wait_tools
-from .pdf import get_pdf_tools
-from .testing import get_testing_tools
-from .api import get_api_tools
-from .vision import get_vision_screen_tools, get_screenshot_tools       
-from .snapshot import get_snapshot_tools
-from .utils import wait_for_completion
-from .google_sheets import get_google_sheets_tools
-from .database import get_database_tools
-from .page_content import get_page_content_tools
+from tools.core import get_core_tools
+from tools.interaction import get_interaction_tools
+from tools.vision import get_vision_tools
+from tools.tabs import get_tab_tools
+from tools.dialogs import get_dialog_tools
+from tools.console import get_console_tools
+from tools.keyboard import get_keyboard_tools
+from tools.network import get_network_tools
+from tools.files import get_file_tools
+from tools.wait import get_wait_tools
+from tools.pdf import get_pdf_tools
+from tools.testing import get_testing_tools
+from tools.api import get_api_tools
+from tools.vision import get_vision_screen_tools, get_screenshot_tools, get_vision_tools
+from tools.snapshot import get_snapshot_tools
+from tools.utils import wait_for_completion
+from tools.google_sheets import get_google_sheets_tools
+from tools.database import get_database_tools
+from tools.page_content import get_page_content_tools
 # Import new tools here
 
 if TYPE_CHECKING:
-    from ..context import ServerContext
+    from context import ServerContext
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def create_vision_tools() -> List[Tool]:
     tools.extend(get_snapshot_tools(capture_snapshot=False))
     tools.extend(get_dialog_tools(capture_snapshot=False))
     tools.extend(get_tab_tools(capture_snapshot=False))
-    tools.extend(get_vision_screen_tools(capture_snapshot=False))
+    tools.extend(get_vision_tools(capture_snapshot=False))
     tools.extend(get_console_tools(capture_snapshot=False))
     tools.extend(get_keyboard_tools(capture_snapshot=False))
     tools.extend(get_network_tools(capture_snapshot=False))
@@ -90,7 +90,6 @@ visionTools = create_vision_tools()
 
 
 class EnhancedToolRegistry:
-
     def __init__(
         self,
         context: "ServerContext",
@@ -144,7 +143,7 @@ class EnhancedToolRegistry:
         tools.extend(get_snapshot_tools(capture_snapshot=False))
         tools.extend(get_dialog_tools(capture_snapshot=False))
         tools.extend(get_tab_tools(capture_snapshot=False))
-        tools.extend(get_vision_screen_tools(capture_snapshot=False))
+        tools.extend(get_vision_tools(capture_snapshot=False))
         tools.extend(get_console_tools(capture_snapshot=False))
         tools.extend(get_keyboard_tools(capture_snapshot=False))
         tools.extend(get_network_tools(capture_snapshot=False))
@@ -253,17 +252,17 @@ class EnhancedToolRegistry:
                 content=[{"type": "text", "text": "\n".join(result_lines)}]
             )
 
-        if not self.context._current_tab:
+        try:
+            tab = await self.context.ensure_tab()
+        except Exception as e:
             return ToolActionResult(
                 content=[
                     {
                         "type": "text",
-                        "text": 'No open pages available. Use the "browser_navigate" tool to navigate to a page first.',
+                        "text": f"Failed to initialize browser: {str(e)}",
                     }
                 ]
             )
-
-        tab = self.context.current_tab_or_die()
 
         action_result = None
         if tool_result.action:
@@ -275,7 +274,6 @@ class EnhancedToolRegistry:
                 )
 
             if tool_result.wait_for_network:
-
                 action_result = await wait_for_completion(
                     self.context, tab, racing_action
                 )
@@ -357,7 +355,6 @@ class EnhancedToolRegistry:
 
 
 def get_tools(capabilities: Optional[List[ToolCapability]] = None) -> List[Tool]:
-
     all_tools = []
 
     if not capabilities or ToolCapability.CORE in capabilities:

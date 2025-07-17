@@ -18,14 +18,14 @@ from core.browser_context_factory import (
     BrowserContextManager,
 )
 from core.tab import Tab
-from tools.registry import EnhancedToolRegistry
-from tools.tool_schema import ToolCapability
+from core.registry import EnhancedToolRegistry
+from core.tool_schema import ToolCapability
 from prompts.registry import PromptRegistry
 from resources.registry import ResourceRegistry
 from resources.providers import (
-    FileSystemResourceProvider, 
-    BrowserResourceProvider, 
-    DatabaseResourceProvider
+    FileSystemResourceProvider,
+    BrowserResourceProvider,
+    DatabaseResourceProvider,
 )
 from tools.utils import ManualPromise
 
@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 
 class ServerContext:
-
     def __init__(
         self,
         settings: Settings,
@@ -45,7 +44,6 @@ class ServerContext:
         **factory_kwargs,
     ):
         self.settings: Settings = settings
-
         self._browser_context_manager = get_browser_context_manager(settings)
         self._browser_context_factory = create_browser_context_factory(
             settings, **factory_kwargs
@@ -56,11 +54,8 @@ class ServerContext:
 
         self._tabs: List[Tab] = []
         self._current_tab: Optional[Tab] = None
-
         self._modal_states: List[ModalStateWithTab] = []
-
         self._download_tracker = DownloadTracker(settings.output_dir)
-
         self.clientVersion: Optional[Dict[str, str]] = None
         self._pending_action: Optional[Dict[str, Any]] = None
         self.capabilities = capabilities or []
@@ -77,35 +72,45 @@ class ServerContext:
         self.tool_registry: EnhancedToolRegistry = EnhancedToolRegistry(
             self, tool_capabilities
         )
-        
-        
+
         self.prompt_registry = PromptRegistry()
-        
-        
-        
         self.resource_registry = ResourceRegistry()
         self._setup_resource_providers()
 
     def _setup_resource_providers(self):
-        
-        
-        
         fs_provider = FileSystemResourceProvider(
             root_paths=[os.getcwd()],
             allowed_extensions=[
-                '.txt', '.md', '.json', '.yaml', '.yml', '.xml', '.csv',
-                '.log', '.py', '.js', '.ts', '.html', '.css', '.sql',
-                '.toml', '.ini', '.cfg', '.conf', '.docx', '.pdf'
-            ]
+                ".txt",
+                ".md",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".xml",
+                ".csv",
+                ".log",
+                ".py",
+                ".js",
+                ".ts",
+                ".html",
+                ".css",
+                ".sql",
+                ".toml",
+                ".ini",
+                ".cfg",
+                ".conf",
+                ".docx",
+                ".pdf",
+            ],
         )
         self.resource_registry.register_provider("file", fs_provider)
-        
+
         browser_provider = BrowserResourceProvider(self)
         self.resource_registry.register_provider("browser", browser_provider)
-        
+
         db_provider = DatabaseResourceProvider()
         self.resource_registry.register_provider("db", db_provider)
-        
+
         logger.info("Resource providers initialized")
 
     async def start(self):
@@ -170,8 +175,7 @@ class ServerContext:
     def current_tab_or_die(self) -> Tab:
         if not self._current_tab:
             raise Exception(
-                "No current tab available. "
-                "Navigate to a page or open a new tab first."
+                "No current tab available. Navigate to a page or open a new tab first."
             )
         return self._current_tab
 
@@ -200,7 +204,20 @@ class ServerContext:
         browser_context = context_result.browser_context
 
         if not self._current_tab:
-            await browser_context.new_page()
+            page = await browser_context.new_page()
+            new_tab = next((tab for tab in self._tabs if tab.page == page), None)
+            if new_tab:
+                self._current_tab = new_tab
+            else:
+                tab = Tab(page)
+                tab.set_modal_callbacks(
+                    on_dialog=self._on_dialog_shown,
+                    on_file_chooser=self._on_file_chooser_shown,
+                    on_download=self._on_download_started,
+                )
+                page.on("close", lambda: self._on_page_closed(tab))
+                self._tabs.append(tab)
+                self._current_tab = tab
 
         return self._current_tab
 
@@ -221,7 +238,9 @@ class ServerContext:
         tab = (
             self._current_tab
             if index is None
-            else self._tabs[index - 1] if 0 <= index - 1 < len(self._tabs) else None
+            else self._tabs[index - 1]
+            if 0 <= index - 1 < len(self._tabs)
+            else None
         )
 
         if tab:
@@ -256,25 +275,26 @@ class ServerContext:
                     if tool_instance.clears_modal_state == state.type.value:
                         tool = tool_instance
                         break
-                
+
                 if tool:
                     result.append(
                         f'- [{state.description}]: can be handled by the "{tool.schema.name}" tool'
                     )
                 else:
-                    result.append(f'- [{state.description}]: no handler found')
+                    result.append(f"- [{state.description}]: no handler found")
 
         return result
 
     def _on_dialog_shown(self, tab: Tab, dialog: "Dialog"):
         modal_state = DialogModalState(
-            dialog=dialog, description=f'"{dialog.type}" dialog with message "{dialog.message}"'
+            dialog=dialog,
+            description=f'"{dialog.type}" dialog with message "{dialog.message}"',
         )
         self.set_modal_state(modal_state, tab)
-        
+
         if self._pending_action and "dialog_shown" in self._pending_action:
             self._pending_action["dialog_shown"].resolve()
-            
+
         logger.info(f"Dialog shown in tab: {dialog.message}")
 
     def _on_file_chooser_shown(self, tab: Tab, file_chooser: "FileChooser"):
@@ -300,8 +320,11 @@ class ServerContext:
                 return True
             if self.settings.image_responses == "omit":
                 return False
-        
-        if self.clientVersion and "cursor" in self.clientVersion.get("name", "").lower():
+
+        if (
+            self.clientVersion
+            and "cursor" in self.clientVersion.get("name", "").lower()
+        ):
             return False
 
         return True
@@ -317,18 +340,18 @@ class ServerContext:
             )
         except Exception:
             await asyncio.sleep(time)
-    
-    def _javascript_blocked(self) -> bool:
-        return any(state.modal_state.type.value == 'dialog' for state in self._modal_states)
 
-    async def _race_against_modal_dialogs(self, action):    
-        
-        self._pending_action = {
-            "dialog_shown": ManualPromise()
-        }
-        
+    def _javascript_blocked(self) -> bool:
+        return any(
+            state.modal_state.type.value == "dialog" for state in self._modal_states
+        )
+
+    async def _race_against_modal_dialogs(self, action):
+        self._pending_action = {"dialog_shown": ManualPromise()}
+
         result = None
         try:
+
             async def action_coroutine():
                 nonlocal result
                 result = await action()
@@ -337,21 +360,23 @@ class ServerContext:
             done, pending = await asyncio.wait(
                 [
                     asyncio.create_task(action_coroutine()),
-                    asyncio.create_task(self._pending_action["dialog_shown"].as_coroutine())
+                    asyncio.create_task(
+                        self._pending_action["dialog_shown"].as_coroutine()
+                    ),
                 ],
-                return_when=asyncio.FIRST_COMPLETED
+                return_when=asyncio.FIRST_COMPLETED,
             )
-            
+
             for task in pending:
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
-                    
+
         finally:
             self._pending_action = None
-            
+
         return result
 
     async def create_context_with_factory(
@@ -377,7 +402,7 @@ class ServerContext:
 
         try:
             for scheme, provider in self.resource_registry.get_providers().items():
-                if hasattr(provider, '_file_watchers'):
+                if hasattr(provider, "_file_watchers"):
                     for watcher in provider._file_watchers.values():
                         watcher.cancel()
                     provider._file_watchers.clear()
@@ -406,3 +431,66 @@ class ServerContext:
 
     def __str__(self) -> str:
         return f"ServerContext(browser={self.settings.browser_type}, tabs={len(self._tabs)})"
+
+    async def get_iframe_contexts(self) -> List[Dict[str, Any]]:
+        """Get all iframe contexts in current page"""
+        try:
+            current_tab = self.current_tab_or_die()
+
+            iframe_info = await current_tab.page.evaluate("""
+                () => {
+                    const iframes = document.querySelectorAll('iframe');
+                    return Array.from(iframes).map((iframe, index) => {
+                        const rect = iframe.getBoundingClientRect();
+                        return {
+                            index: index,
+                            id: iframe.id || null,
+                            name: iframe.name || null,
+                            src: iframe.src || null,
+                            selector: iframe.id ? `#${iframe.id}` : 
+                                     iframe.name ? `[name="${iframe.name}"]` :
+                                     `iframe:nth-of-type(${index + 1})`,
+                            x: Math.round(rect.left),
+                            y: Math.round(rect.top),
+                            width: Math.round(rect.width),
+                            height: Math.round(rect.height),
+                            visible: rect.width > 0 && rect.height > 0
+                        };
+                    });
+                }
+            """)
+
+            return iframe_info
+        except Exception as e:
+            logger.error(f"Error getting iframe contexts: {e}")
+            return []
+
+    async def switch_to_iframe(self, iframe_selector: str):
+        """Switch focus to specific iframe"""
+        try:
+            current_tab = self.current_tab_or_die()
+
+            iframe_locator = current_tab.page.locator(iframe_selector)
+            frame = iframe_locator.content_frame()
+
+            return frame
+        except Exception as e:
+            logger.error(f"Error switching to iframe {iframe_selector}: {e}")
+            return None
+
+    async def get_iframe_url(self, iframe_selector: str) -> Optional[str]:
+        """Get URL of specific iframe"""
+        try:
+            current_tab = self.current_tab_or_die()
+
+            iframe_src = await current_tab.page.evaluate(f"""
+                () => {{
+                    const iframe = document.querySelector('{iframe_selector}');
+                    return iframe ? iframe.src : null;
+                }}
+            """)
+
+            return iframe_src
+        except Exception as e:
+            logger.error(f"Error getting iframe URL: {e}")
+            return None

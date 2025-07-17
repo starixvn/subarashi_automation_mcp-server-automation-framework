@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ElementReference:
-
     ref: str
     element: str
     x: int
@@ -24,11 +23,12 @@ class ElementReference:
     tag_name: str
     text: Optional[str] = None
     attributes: Optional[Dict[str, str]] = None
+    iframe_index: Optional[int] = None
+    iframe_selector: Optional[str] = None
 
 
 @dataclass
 class AccessibilityNode:
-
     role: str
     name: Optional[str] = None
     value: Optional[str] = None
@@ -62,7 +62,6 @@ class AccessibilityNode:
 
 
 class PageSnapshot:
-
     def __init__(self, page: "Page"):
         self.page = page
         self._accessibility_tree: Optional[AccessibilityNode] = None
@@ -161,31 +160,128 @@ class PageSnapshot:
                     '[role="menuitem"]', '[role="option"]', '[tabindex]'
                 ];
                 
-                const allElements = document.querySelectorAll(interactiveSelectors.join(', '));
-                
-                allElements.forEach((el, index) => {
-                    const rect = el.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        const ref = `element_${index}`;
-                        el.setAttribute('data-ref', ref);
-                        
-                        elements.push({
-                            ref: ref,
-                            element: el.tagName.toLowerCase() + (el.textContent ? ': ' + el.textContent.trim().substring(0, 50) : ''),
-                            x: Math.round(rect.left + rect.width / 2),
-                            y: Math.round(rect.top + rect.height / 2),
-                            width: Math.round(rect.width),
-                            height: Math.round(rect.height),
-                            tag_name: el.tagName.toLowerCase(),
-                            text: el.textContent ? el.textContent.trim() : null,
-                            attributes: {
-                                id: el.id || null,
-                                class: el.className || null,
-                                type: el.type || null,
-                                href: el.href || null,
-                                role: el.getAttribute('role') || null
+                function scanDocument(doc, frameIndex = null, frameSelector = null) {
+                    const allElements = doc.querySelectorAll(interactiveSelectors.join(', '));
+                    
+                    allElements.forEach((el, index) => {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            const refIndex = frameIndex !== null ? `${frameIndex}_${index}` : `${index}`;
+                            const ref = `element_${refIndex}`;
+                            el.setAttribute('data-ref', ref);
+                            
+                            let elementDescription = el.tagName.toLowerCase();
+                            if (el.textContent) {
+                                elementDescription += ': ' + el.textContent.trim().substring(0, 50);
                             }
-                        });
+                            if (frameIndex !== null) {
+                                elementDescription = `[iframe] ${elementDescription}`;
+                            }
+                            
+                            elements.push({
+                                ref: ref,
+                                element: elementDescription,
+                                x: Math.round(rect.left + rect.width / 2),
+                                y: Math.round(rect.top + rect.height / 2),
+                                width: Math.round(rect.width),
+                                height: Math.round(rect.height),
+                                tag_name: el.tagName.toLowerCase(),
+                                text: el.textContent ? el.textContent.trim() : null,
+                                iframe_index: frameIndex,
+                                iframe_selector: frameSelector,
+                                attributes: {
+                                    id: el.id || null,
+                                    class: el.className || null,
+                                    type: el.type || null,
+                                    href: el.href || null,
+                                    role: el.getAttribute('role') || null
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                scanDocument(document);
+                
+                const iframes = document.querySelectorAll('iframe');
+                iframes.forEach((iframe, frameIndex) => {
+                    try {
+                        const iframeRect = iframe.getBoundingClientRect();
+                        const isVisible = iframeRect.width > 0 && iframeRect.height > 0;
+                        
+                        if (!isVisible) {
+                            console.log(`Skipping hidden iframe ${frameIndex}`);
+                            return;
+                        }
+                        
+                        let frameSelector = '';
+                        if (iframe.id) {
+                            frameSelector = `#${iframe.id}`;
+                        } else if (iframe.name) {
+                            frameSelector = `[name="${iframe.name}"]`;
+                        } else if (iframe.src) {
+                            frameSelector = `iframe[src*="${iframe.src.split('/').pop()}"]`;
+                        } else {
+                            frameSelector = `iframe:nth-of-type(${frameIndex + 1})`;
+                        }
+                        
+                        let iframeDoc = null;
+                        try {
+                            iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                        } catch (accessError) {
+                            console.log(`Cross-origin iframe ${frameIndex}: ${accessError.message}`);
+                            
+                            const iframeRef = `iframe_${frameIndex}`;
+                            iframe.setAttribute('data-ref', iframeRef);
+                            
+                            elements.push({
+                                ref: iframeRef,
+                                element: `[iframe] ${iframe.src || 'Unknown source'} (cross-origin)`,
+                                x: Math.round(iframeRect.left + iframeRect.width / 2),
+                                y: Math.round(iframeRect.top + iframeRect.height / 2),
+                                width: Math.round(iframeRect.width),
+                                height: Math.round(iframeRect.height),
+                                tag_name: 'iframe',
+                                text: null,
+                                iframe_index: frameIndex,
+                                iframe_selector: frameSelector,
+                                attributes: {
+                                    id: iframe.id || null,
+                                    name: iframe.name || null,
+                                    src: iframe.src || null,
+                                    cross_origin: true
+                                }
+                            });
+                            return;
+                        }
+                        
+                        if (iframeDoc) {
+                            scanDocument(iframeDoc, frameIndex, frameSelector);
+                            
+                            const iframeRef = `iframe_container_${frameIndex}`;
+                            iframe.setAttribute('data-ref', iframeRef);
+                            
+                            elements.push({
+                                ref: iframeRef,
+                                element: `[iframe-container] ${iframe.src || 'Unknown source'}`,
+                                x: Math.round(iframeRect.left + iframeRect.width / 2),
+                                y: Math.round(iframeRect.top + iframeRect.height / 2),
+                                width: Math.round(iframeRect.width),
+                                height: Math.round(iframeRect.height),
+                                tag_name: 'iframe',
+                                text: null,
+                                iframe_index: null,
+                                iframe_selector: frameSelector,
+                                attributes: {
+                                    id: iframe.id || null,
+                                    name: iframe.name || null,
+                                    src: iframe.src || null,
+                                    cross_origin: false
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.log(`Error processing iframe ${frameIndex}: ${e.message}`);
                     }
                 });
                 
@@ -208,6 +304,13 @@ class PageSnapshot:
                     text=elem_data["text"],
                     attributes=elem_data["attributes"],
                 )
+                if elem_data.get("iframe_index") is not None:
+                    ref.iframe_index = elem_data["iframe_index"]
+                    ref.iframe_selector = elem_data["iframe_selector"]
+                else:
+                    ref.iframe_index = None
+                    ref.iframe_selector = None
+
                 self._element_references[ref.ref] = ref
 
         except Exception as e:
@@ -255,8 +358,22 @@ class PageSnapshot:
 
         if self._element_references:
             lines.append("Interactive Elements:")
+            iframe_count = 0
+            main_count = 0
+
             for ref, elem in self._element_references.items():
-                lines.append(f"  [{ref}] {elem.element} at ({elem.x}, {elem.y})")
+                if elem.iframe_index is not None:
+                    iframe_count += 1
+                    lines.append(
+                        f"  [{ref}] {elem.element} at ({elem.x}, {elem.y}) [iframe#{elem.iframe_index}]"
+                    )
+                else:
+                    main_count += 1
+                    lines.append(f"  [{ref}] {elem.element} at ({elem.x}, {elem.y})")
+
+            if iframe_count > 0:
+                lines.append(f"Elements in main document: {main_count}")
+                lines.append(f"Elements in iframes: {iframe_count}")
             lines.append("")
 
         if not self._accessibility_tree and self._page_text:
@@ -294,9 +411,23 @@ class PageSnapshot:
         element = params.get("element", "")
         ref = params.get("ref", "")
 
-        locator = self.page.locator(f"[data-ref='{ref}']")
+        element_ref = self.get_element_reference(ref)
 
-        return locator
+        if element_ref and element_ref.iframe_index is not None:
+            try:
+                if element_ref.iframe_selector:
+                    frame_locator = self.page.frame_locator(element_ref.iframe_selector)
+                    return frame_locator.locator(f"[data-ref='{ref}']")
+                else:
+                    frame_locator = self.page.frame_locator(
+                        f"iframe:nth-of-type({element_ref.iframe_index + 1})"
+                    )
+                    return frame_locator.locator(f"[data-ref='{ref}']")
+            except Exception as e:
+                print(f"Warning: Failed to access iframe for ref {ref}: {e}")
+                return self.page.locator(f"[data-ref='{ref}']")
+        else:
+            return self.page.locator(f"[data-ref='{ref}']")
 
     def has_screenshot(self) -> bool:
         return self._screenshot_data is not None
@@ -324,6 +455,13 @@ class PageSnapshot:
             "timestamp": self._timestamp,
             "has_screenshot": self.has_screenshot(),
             "element_count": len(self._element_references),
+            "iframe_elements_count": len(
+                [
+                    ref
+                    for ref in self._element_references.values()
+                    if ref.iframe_index is not None
+                ]
+            ),
             "accessibility_tree": (
                 self._accessibility_tree_to_dict() if self._accessibility_tree else None
             ),
@@ -338,6 +476,8 @@ class PageSnapshot:
                     "tag_name": elem.tag_name,
                     "text": elem.text,
                     "attributes": elem.attributes,
+                    "iframe_index": elem.iframe_index,
+                    "iframe_selector": elem.iframe_selector,
                 }
                 for ref, elem in self._element_references.items()
             },
