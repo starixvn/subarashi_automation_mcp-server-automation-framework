@@ -10,7 +10,7 @@ from .network_service import NetworkService
 from .keyboard_service import KeyboardService
 from .wait_service import WaitService
 from .vision_service import VisionService
-from .testing_service import TestingService
+
 from .console_service import ConsoleService
 from .pdf_service import PdfService
 
@@ -27,7 +27,6 @@ __all__ = [
     "KeyboardService",
     "WaitService",
     "VisionService",
-    "TestingService",
     "ConsoleService",
     "PdfService",
 ]

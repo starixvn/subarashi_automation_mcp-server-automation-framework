@@ -22,7 +22,6 @@ from tools.network import get_network_tools
 from tools.files import get_file_tools
 from tools.wait import get_wait_tools
 from tools.pdf import get_pdf_tools
-from tools.testing import get_testing_tools
 from tools.api import get_api_tools
 from tools.vision import get_vision_screen_tools, get_screenshot_tools, get_vision_tools
 from tools.snapshot import get_snapshot_tools
@@ -30,6 +29,7 @@ from tools.utils import wait_for_completion
 from tools.google_sheets import get_google_sheets_tools
 from tools.database import get_database_tools
 from tools.page_content import get_page_content_tools
+from tools.evaluate import get_evaluate_tools
 # Import new tools here
 
 if TYPE_CHECKING:
@@ -52,11 +52,11 @@ def create_snapshot_tools() -> List[Tool]:
     tools.extend(get_file_tools(capture_snapshot=True))
     tools.extend(get_wait_tools(capture_snapshot=True))
     tools.extend(get_pdf_tools(capture_snapshot=True))
-    tools.extend(get_testing_tools(capture_snapshot=True))
     tools.extend(get_api_tools(capture_snapshot=False))
     tools.extend(get_google_sheets_tools(capture_snapshot=False))
     tools.extend(get_database_tools(capture_snapshot=False))
     tools.extend(get_page_content_tools(capture_snapshot=True))
+    tools.extend(get_evaluate_tools(capture_snapshot=True))
     # Add new tools here
 
     return tools
@@ -76,11 +76,11 @@ def create_vision_tools() -> List[Tool]:
     tools.extend(get_file_tools(capture_snapshot=False))
     tools.extend(get_wait_tools(capture_snapshot=False))
     tools.extend(get_pdf_tools(capture_snapshot=False))
-    tools.extend(get_testing_tools(capture_snapshot=False))
     tools.extend(get_api_tools(capture_snapshot=False))
     tools.extend(get_google_sheets_tools(capture_snapshot=False))
     tools.extend(get_database_tools(capture_snapshot=False))
     tools.extend(get_page_content_tools(capture_snapshot=False))
+    tools.extend(get_evaluate_tools(capture_snapshot=False))
     # Add new tools here
     return tools
 
@@ -127,11 +127,11 @@ class EnhancedToolRegistry:
         tools.extend(get_file_tools(capture_snapshot=True))
         tools.extend(get_wait_tools(capture_snapshot=True))
         tools.extend(get_pdf_tools(capture_snapshot=True))
-        tools.extend(get_testing_tools(capture_snapshot=True))
         tools.extend(get_api_tools(capture_snapshot=False))
         tools.extend(get_google_sheets_tools(capture_snapshot=False))
         tools.extend(get_database_tools(capture_snapshot=False))
         tools.extend(get_page_content_tools(capture_snapshot=True))
+        tools.extend(get_evaluate_tools(capture_snapshot=True))
         # Add new tools here
         return tools
 
@@ -150,11 +150,11 @@ class EnhancedToolRegistry:
         tools.extend(get_file_tools(capture_snapshot=False))
         tools.extend(get_wait_tools(capture_snapshot=False))
         tools.extend(get_pdf_tools(capture_snapshot=False))
-        tools.extend(get_testing_tools(capture_snapshot=False))
         tools.extend(get_api_tools(capture_snapshot=False))
         tools.extend(get_google_sheets_tools(capture_snapshot=False))
         tools.extend(get_database_tools(capture_snapshot=False))
         tools.extend(get_page_content_tools(capture_snapshot=False))
+        tools.extend(get_evaluate_tools(capture_snapshot=False))
         # Add new tools here
         return tools
 
@@ -384,9 +384,6 @@ def get_tools(capabilities: Optional[List[ToolCapability]] = None) -> List[Tool]
     if not capabilities or ToolCapability.PDF in capabilities:
         all_tools.extend(get_pdf_tools())
 
-    if not capabilities or ToolCapability.TESTING in capabilities:
-        all_tools.extend(get_testing_tools())
-
     if not capabilities or ToolCapability.API in capabilities:
         all_tools.extend(get_api_tools())
 
@@ -401,6 +398,7 @@ def get_tools(capabilities: Optional[List[ToolCapability]] = None) -> List[Tool]
     all_tools.extend(get_interaction_tools())
     all_tools.extend(get_snapshot_tools())
     all_tools.extend(get_dialog_tools())
+    all_tools.extend(get_evaluate_tools())
     # Add new tools here
 
     return all_tools

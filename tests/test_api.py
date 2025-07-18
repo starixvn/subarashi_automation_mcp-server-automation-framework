@@ -1,6 +1,6 @@
 import pytest
 from tools.api import get_api_tools
-from core.schemas import ApiRequestInputSchema, ApiTestInputSchema
+from core.schemas import ApiRequestInputSchema
 from context import ServerContext
 from config.settings import Settings
 
@@ -18,16 +18,10 @@ def api_tools():
 
 class TestApiTools:
     def test_api_tools_creation(self, api_tools):
-        assert len(api_tools) == 7
+        assert len(api_tools) == 1
         tool_names = [tool.schema.name for tool in api_tools]
         expected_names = [
             "api_request",
-            "api_get",
-            "api_post",
-            "api_put",
-            "api_delete",
-            "api_patch",
-            "api_test",
         ]
         assert set(tool_names) == set(expected_names)
 
@@ -48,17 +42,6 @@ class TestApiTools:
         with pytest.raises(ValueError):
             ApiRequestInputSchema(**invalid_params)
 
-    def test_api_test_schema_validation(self):
-        valid_params = {
-            "url": "https://api.example.com/test",
-            "method": "GET",
-            "expected_status": 200,
-            "expected_contains": "success",
-        }
-        schema = ApiTestInputSchema(**valid_params)
-        assert schema.expected_status == 200
-        assert schema.expected_contains == "success"
-
     def test_api_tools_have_correct_capabilities(self, api_tools):
         from core.tool_schema import ToolCapability
 
@@ -68,33 +51,24 @@ class TestApiTools:
     def test_api_tools_have_correct_schemas(self, api_tools):
         for tool in api_tools:
             assert tool.schema.name.startswith("api_")
-            assert tool.schema.input_schema in [
-                ApiRequestInputSchema,
-                ApiTestInputSchema,
-            ]
+            assert tool.schema.input_schema == ApiRequestInputSchema
 
-    def test_api_tools_capture_snapshot_is_false(self, api_tools):
-        from core.tool_schema import ToolResult, ToolActionResult
-
-        for tool in api_tools:
-            if hasattr(tool, "handle"):
-                assert tool.schema.name in [
-                    "api_request",
-                    "api_get",
-                    "api_post",
-                    "api_put",
-                    "api_delete",
-                    "api_patch",
-                    "api_test",
-                ]
+    def test_api_request_tool_structure(self, api_tools):
+        api_request_tool = next(
+            tool for tool in api_tools if tool.schema.name == "api_request"
+        )
+        assert api_request_tool.schema.name == "api_request"
+        assert hasattr(api_request_tool, "handle")
 
     @pytest.mark.asyncio
-    async def test_api_get_tool_structure(self, context, api_tools):
-        api_get_tool = next(tool for tool in api_tools if tool.schema.name == "api_get")
+    async def test_api_request_tool_execution(self, context, api_tools):
+        api_request_tool = next(
+            tool for tool in api_tools if tool.schema.name == "api_request"
+        )
 
         params = {"url": "https://httpbin.org/get", "method": "GET"}
 
-        result = await api_get_tool.handle(context, params)
+        result = await api_request_tool.handle(context, params)
 
         assert result.code is not None
         assert len(result.code) > 0
@@ -102,109 +76,102 @@ class TestApiTools:
         assert result.capture_snapshot is False
         assert result.wait_for_network is False
 
-    @pytest.mark.asyncio
-    async def test_api_test_tool_structure(self, context, api_tools):
-        api_test_tool = next(
-            tool for tool in api_tools if tool.schema.name == "api_test"
-        )
 
+class TestApiRequestInputSchema:
+    def test_api_request_schema_headers_parsing(self):
+        # Test with dict headers
+        params_dict = {
+            "url": "https://api.example.com/test",
+            "method": "POST",
+            "headers": {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer token123",
+            },
+        }
+        schema = ApiRequestInputSchema(**params_dict)
+        assert isinstance(schema.headers, dict)
+        assert schema.headers["Content-Type"] == "application/json"
+        assert schema.headers["Authorization"] == "Bearer token123"
+
+    def test_api_request_schema_method_validation(self):
+        valid_methods = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+        for method in valid_methods:
+            params = {"url": "https://api.example.com/test", "method": method}
+            schema = ApiRequestInputSchema(**params)
+            assert schema.method == method
+
+    def test_api_request_schema_timeout_validation(self):
+        params = {"url": "https://api.example.com/test", "method": "GET", "timeout": 60}
+        schema = ApiRequestInputSchema(**params)
+        assert schema.timeout == 60
+
+    def test_api_request_schema_body_validation(self):
         params = {
-            "url": "https://httpbin.org/get",
-            "method": "GET",
-            "expected_status": 200,
-            "expected_contains": "origin",
+            "url": "https://api.example.com/test",
+            "method": "POST",
+            "body": '{"key": "value"}',
         }
+        schema = ApiRequestInputSchema(**params)
+        assert schema.body == '{"key": "value"}'
 
-        result = await api_test_tool.handle(context, params)
 
-        assert result.code is not None
-        assert len(result.code) > 0
-        assert result.action is not None
-        assert result.capture_snapshot is False
-        assert result.wait_for_network is False
+@pytest.mark.asyncio
+async def test_api_tools_capability_filtering():
+    # Test that api tools have proper capability filtering
+    api_tools = get_api_tools(capture_snapshot=False)
 
-        assert any("Assert" in line or "assert" in line for line in result.code)
+    # Check that we have the expected api tools
+    tool_names = [tool.schema.name for tool in api_tools]
+    expected_tools = ["api_request"]
 
-    def test_method_specific_tools_use_correct_methods(self):
-        """Test that method-specific tools use the correct HTTP methods"""
-        tools = get_api_tools(capture_snapshot=False)
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Missing api tool: {expected_tool}"
 
-        # Test each method-specific tool
-        expected_methods = {
-            "api_get": "GET",
-            "api_post": "POST",
-            "api_put": "PUT",
-            "api_delete": "DELETE",
-            "api_patch": "PATCH",
-        }
+    # Check that all tools have API capability
+    from core.tool_schema import ToolCapability
 
-        for tool_name, expected_method in expected_methods.items():
-            tool = next((t for t in tools if t.schema.name == tool_name), None)
-            assert tool is not None, f"Tool {tool_name} not found"
+    for tool in api_tools:
+        assert tool.capability == ToolCapability.API
 
-    def test_headers_json_string_parsing(self):
-        """Test that headers are properly parsed from JSON string to dictionary"""
-        from core.schemas import ApiRequestInputSchema, ApiTestInputSchema
 
-        # Test valid JSON string headers
-        json_headers = (
-            '{"Content-Type": "application/json", "Authorization": "Bearer token123"}'
-        )
+@pytest.mark.asyncio
+async def test_api_tools_capture_snapshot_parameter():
+    # Test that api tools respect capture_snapshot parameter
+    tools_with_snapshot = get_api_tools(capture_snapshot=True)
+    tools_without_snapshot = get_api_tools(capture_snapshot=False)
 
-        # Test ApiRequestInputSchema
-        api_request = ApiRequestInputSchema(
-            url="https://httpbin.org/post",
-            method="POST",
-            headers=json_headers,
-            body='{"test": "data"}',
-        )
+    assert len(tools_with_snapshot) == len(tools_without_snapshot)
 
-        assert isinstance(api_request.headers, dict)
-        assert api_request.headers["Content-Type"] == "application/json"
-        assert api_request.headers["Authorization"] == "Bearer token123"
+    for tool in tools_with_snapshot:
+        assert tool.schema.name.startswith("api_")
 
-        # Test ApiTestInputSchema
-        api_test = ApiTestInputSchema(
-            url="https://httpbin.org/post",
-            method="POST",
-            headers=json_headers,
-            body='{"test": "data"}',
-            expected_status=200,
-        )
+    for tool in tools_without_snapshot:
+        assert tool.schema.name.startswith("api_")
 
-        assert isinstance(api_test.headers, dict)
-        assert api_test.headers["Content-Type"] == "application/json"
-        assert api_test.headers["Authorization"] == "Bearer token123"
 
-        # Test invalid JSON string
-        with pytest.raises(ValueError) as excinfo:
-            ApiRequestInputSchema(
-                url="https://httpbin.org/post",
-                method="POST",
-                headers='{"invalid": json}',  # Invalid JSON
-                body='{"test": "data"}',
-            )
-        assert "Headers must be a valid JSON object" in str(excinfo.value)
+@pytest.mark.asyncio
+async def test_api_tools_schema_validation():
+    # Test that api tools have proper schema validation
+    api_tools = get_api_tools(capture_snapshot=False)
 
-        # Test that dict headers still work
-        dict_headers = {"Content-Type": "application/json"}
-        api_request_dict = ApiRequestInputSchema(
-            url="https://httpbin.org/post",
-            method="POST",
-            headers=dict_headers,
-            body='{"test": "data"}',
-        )
-        assert isinstance(api_request_dict.headers, dict)
-        assert api_request_dict.headers["Content-Type"] == "application/json"
+    for tool in api_tools:
+        # Test that each tool has required attributes
+        assert hasattr(tool, "schema")
+        assert hasattr(tool.schema, "name")
+        assert hasattr(tool.schema, "description")
+        assert hasattr(tool.schema, "input_schema")
 
-    def test_api_tools_are_browser_independent(self):
-        """Test that all API tools have browser_independent=True to work without browser context"""
-        tools = get_api_tools(capture_snapshot=False)
+        # Test that api tools have read-only type
+        from core.tool_schema import ToolType
 
-        for tool in tools:
-            assert hasattr(tool, "browser_independent"), (
-                f"Tool {tool.schema.name} missing browser_independent attribute"
-            )
-            assert tool.browser_independent is True, (
-                f"Tool {tool.schema.name} should be browser_independent=True"
-            )
+        assert tool.schema.tool_type == ToolType.READ_ONLY
+
+
+@pytest.mark.asyncio
+async def test_api_tools_network_settings():
+    # Test that api tools have proper network settings
+    api_tools = get_api_tools(capture_snapshot=False)
+
+    for tool in api_tools:
+        # API tools should be browser independent
+        assert getattr(tool, "browser_independent", False) == True

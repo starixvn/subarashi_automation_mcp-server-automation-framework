@@ -21,20 +21,15 @@ class Tab:
         self._on_dialog_callback: Optional[Callable] = None
         self._on_file_chooser_callback: Optional[Callable] = None
         self._on_download_callback: Optional[Callable] = None
-
         self._current_snapshot: Optional[PageSnapshot] = None
 
         self._setup_listeners()
 
     def _setup_listeners(self):
         self.page.on("console", self._on_console_message)
-
         self.page.on("request", self._on_network_request)
-
         self.page.on("dialog", self._on_dialog)
-
         self.page.on("filechooser", self._on_file_chooser)
-
         self.page.on("download", self._on_download)
 
     def _on_console_message(self, msg):
