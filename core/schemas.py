@@ -508,55 +508,6 @@ class ApiRequestInputSchema(ToolInputSchema):
         return v
 
 
-class ApiTestInputSchema(ToolInputSchema):
-    url: str = Field(description="API endpoint URL")
-    method: str = Field(description="HTTP method (GET, POST, PUT, DELETE, PATCH)")
-    headers: Optional[Union[Dict[str, str], str]] = Field(
-        default=None, description="HTTP headers"
-    )
-    body: Optional[str] = Field(
-        default=None, description="Request body for POST/PUT/PATCH"
-    )
-    expected_status: Optional[int] = Field(
-        default=None, description="Expected HTTP status code"
-    )
-    expected_contains: Optional[str] = Field(
-        default=None, description="Text that response should contain"
-    )
-    timeout: Optional[int] = Field(
-        default=30, description="Request timeout in seconds", ge=1, le=300
-    )
-
-    @field_validator("headers", mode="before")
-    @classmethod
-    def parse_headers(cls, v):
-        if isinstance(v, str):
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                headers = {}
-                for item in v.split(","):
-                    if ":" in item:
-                        key, value = item.split(":", 1)
-                        headers[key.strip()] = value.strip()
-                return headers
-        return v
-
-    @field_validator("method")
-    @classmethod
-    def validate_method(cls, v):
-        if v.upper() not in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
-            raise ValueError("Method must be GET, POST, PUT, DELETE, or PATCH")
-        return v.upper()
-
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, v):
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("URL must start with http:// or https://")
-        return v
-
-
 class DatabaseConnectInputSchema(ToolInputSchema):
     host: str = Field(description="SQL Server host")
     port: Optional[int] = Field(
@@ -639,20 +590,17 @@ class GetPageHtmlInputSchema(ToolInputSchema):
     )
 
 
-class GetPageContentInputSchema(ToolInputSchema):
-    """Input schema for getting page content with options"""
-
-    include_meta: bool = Field(
-        default=False, description="Include meta tags in the output"
+class EvaluateJavaScriptInputSchema(ToolInputSchema):
+    function: str = Field(
+        description="JavaScript function to evaluate: '() => { /* code */ }' or '(element) => { /* code */ }' when element is provided"
     )
-    include_links: bool = Field(
-        default=False, description="Include links in the output"
+    element: Optional[str] = Field(
+        default=None,
+        description="Human-readable element description used to obtain permission to interact with the element",
     )
-    include_images: bool = Field(
-        default=False, description="Include images in the output"
-    )
-    max_length: int = Field(
-        default=50000, description="Maximum length of text content", ge=1000, le=200000
+    ref: Optional[str] = Field(
+        default=None,
+        description="Exact target element reference from the page snapshot",
     )
 
 

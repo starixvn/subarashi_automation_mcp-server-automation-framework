@@ -108,142 +108,27 @@ class PageContentService(BaseService):
         except Exception as e:
             return await self.handle_error(e, "get_page_html")
 
-    async def get_page_content(
-        self,
-        include_meta: bool = False,
-        include_links: bool = False,
-        include_images: bool = False,
-        max_length: int = 50000,
+    async def evaluate_javascript(
+        self, function: str, element_ref: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         try:
             tab = self.get_current_tab()
-            page_title = await tab.page.title()
-            page_url = tab.page.url
+            snapshot = tab.snapshot_or_die()
 
-            main_text = await tab.page.text_content("body") or ""
+            if element_ref and element_ref.get("ref") and element_ref.get("element"):
+                locator = snapshot.ref_locator(element_ref)
+                if not locator:
+                    return self.handle_error(
+                        ValueError(f"Element not found: {element_ref}"),
+                        "evaluate_javascript",
+                    )
 
-            iframe_text = ""
-            try:
-                iframe_content = await tab.page.evaluate("""
-                    () => {
-                        const iframes = document.querySelectorAll('iframe');
-                        let allText = '';
-                        
-                        Array.from(iframes).forEach((iframe, index) => {
-                            try {
-                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                                if (iframeDoc && iframeDoc.body) {
-                                    const text = iframeDoc.body.innerText || '';
-                                    if (text.trim()) {
-                                        allText += `\\n\\n--- iframe #${index} content ---\\n${text}`;
-                                    }
-                                }
-                            } catch (e) {
-                                allText += `\\n\\n--- iframe #${index} (cross-origin) ---\\n[Cannot access content]`;
-                            }
-                        });
-                        
-                        return allText;
-                    }
-                """)
-                iframe_text = iframe_content
-            except Exception:
-                iframe_text = ""
-
-            page_text = main_text + iframe_text
-
-            if len(page_text) > max_length:
-                page_text = page_text[:max_length] + "... (truncated)"
-
-            content_data = {
-                "title": page_title,
-                "url": page_url,
-                "text": page_text,
-                "text_length": len(page_text),
-                "main_text_length": len(main_text),
-                "iframe_text_length": len(iframe_text),
-                "has_iframe_content": len(iframe_text) > 0,
-            }
-
-            if include_meta:
-                try:
-                    meta_data = await tab.page.evaluate("""
-                        () => Array.from(document.querySelectorAll('meta')).map(m => ({
-                            name: m.name || m.getAttribute('property'),
-                            content: m.content
-                        })).filter(m => m.name && m.content).slice(0, 20)
-                    """)
-                    content_data["meta"] = meta_data
-                except Exception:
-                    content_data["meta"] = []
-
-            if include_links:
-                try:
-                    links = await tab.page.evaluate("""
-                        () => Array.from(document.querySelectorAll('a[href]')).map(a => ({
-                            href: a.href,
-                            text: a.textContent.trim()
-                        })).filter(l => l.text).slice(0, 30)
-                    """)
-                    content_data["links"] = links
-                except Exception:
-                    content_data["links"] = []
-
-            if include_images:
-                try:
-                    images = await tab.page.evaluate("""
-                        () => Array.from(document.querySelectorAll('img[src]')).map(img => ({
-                            src: img.src,
-                            alt: img.alt || ''
-                        })).slice(0, 20)
-                    """)
-                    content_data["images"] = images
-                except Exception:
-                    content_data["images"] = []
+                result = await locator.evaluate(function)
+            else:
+                result = await tab.page.evaluate(function)
 
             return self.success_response(
-                data=content_data, message=f"Page content extracted from {page_url}"
-            )
-
-        except Exception as e:
-            return await self.handle_error(e, "get_page_content")
-
-    async def get_page_text(self, selector: str = "body") -> Dict[str, Any]:
-        try:
-            tab = self.get_current_tab()
-            text = await tab.page.text_content(selector) or ""
-
-            return self.success_response(
-                data={"text": text, "selector": selector},
-                message=f"Text extracted from {selector}",
+                {"result": result}, f"JavaScript evaluated successfully"
             )
         except Exception as e:
-            return await self.handle_error(e, "get_page_text")
-
-    async def search_text_in_page(self, search_text: str) -> Dict[str, Any]:
-        try:
-            tab = self.get_current_tab()
-            found = await tab.page.evaluate(f"""
-                () => {{
-                    const text = '{search_text}';
-                    const body = document.body;
-                    const textContent = body.innerText || body.textContent;
-                    
-                    const index = textContent.toLowerCase().indexOf(text.toLowerCase());
-                    if (index !== -1) {{
-                        return {{
-                            found: true,
-                            index: index,
-                            context: textContent.substring(Math.max(0, index - 50), index + text.length + 50)
-                        }};
-                    }}
-                    return {{found: false}};
-                }}
-            """)
-
-            return self.success_response(
-                data=found, message=f"Search completed for '{search_text}'"
-            )
-
-        except Exception as e:
-            return await self.handle_error(e, "search_text_in_page")
+            return self.handle_error(e, "evaluate_javascript")

@@ -40,7 +40,6 @@ from core.schemas import (
     SetRequestInterceptionInputSchema,
     UploadFileInputSchema,
     ApiRequestInputSchema,
-    ApiTestInputSchema,
     DatabaseConnectInputSchema,
     DatabaseQueryInputSchema,
     DatabaseExecuteInputSchema,
@@ -48,7 +47,7 @@ from core.schemas import (
     DatabaseDescribeTableInputSchema,
     DatabaseCloseInputSchema,
     GetPageHtmlInputSchema,
-    GetPageContentInputSchema,
+    EvaluateJavaScriptInputSchema,
 )
 
 from .core import get_core_tools
@@ -63,11 +62,12 @@ from .network import get_network_tools
 from .files import get_file_tools
 from .wait import get_wait_tools
 from .pdf import get_pdf_tools
-from .testing import get_testing_tools
+
 from .api import get_api_tools
 from .google_sheets import get_google_sheets_tools
 from .database import get_database_tools
 from .page_content import get_page_content_tools, PAGE_CONTENT_TOOLS
+from .evaluate import get_evaluate_tools, EVALUATE_TOOLS
 
 ALL_TOOLS = [
     *get_core_tools(),
@@ -83,11 +83,11 @@ ALL_TOOLS = [
     *get_file_tools(),
     *get_wait_tools(),
     *get_pdf_tools(),
-    *get_testing_tools(),
     *get_api_tools(),
     *get_google_sheets_tools(),
     *get_database_tools(),
     *PAGE_CONTENT_TOOLS,
+    *EVALUATE_TOOLS,
 ]
 
 
@@ -116,9 +116,6 @@ def get_all_tools(capabilities=None, capture_snapshot=True):
     if not capabilities or ToolCapability.FILES in capabilities:
         all_tools.extend(get_file_tools(capture_snapshot))
 
-    if not capabilities or ToolCapability.TESTING in capabilities:
-        all_tools.extend(get_testing_tools(capture_snapshot))
-
     if not capabilities or ToolCapability.WAIT in capabilities:
         all_tools.extend(get_wait_tools(capture_snapshot))
 
@@ -138,6 +135,7 @@ def get_all_tools(capabilities=None, capture_snapshot=True):
     all_tools.extend(get_dialog_tools(capture_snapshot))
     all_tools.extend(get_interaction_tools(capture_snapshot))
     all_tools.extend(get_snapshot_tools(capture_snapshot))
+    all_tools.extend(EVALUATE_TOOLS)
 
     return all_tools
 
@@ -181,7 +179,6 @@ __all__ = [
     "SetRequestInterceptionInputSchema",
     "UploadFileInputSchema",
     "ApiRequestInputSchema",
-    "ApiTestInputSchema",
     "DatabaseConnectInputSchema",
     "DatabaseQueryInputSchema",
     "DatabaseExecuteInputSchema",
@@ -189,7 +186,7 @@ __all__ = [
     "DatabaseDescribeTableInputSchema",
     "DatabaseCloseInputSchema",
     "GetPageHtmlInputSchema",
-    "GetPageContentInputSchema",
+    "EvaluateJavaScriptInputSchema",
     "get_core_tools",
     "get_interaction_tools",
     "get_snapshot_tools",
@@ -204,7 +201,6 @@ __all__ = [
     "get_file_tools",
     "get_wait_tools",
     "get_pdf_tools",
-    "get_testing_tools",
     "get_api_tools",
     "ALL_TOOLS",
     "get_all_tools",
@@ -212,4 +208,5 @@ __all__ = [
     "get_database_tools",
     "get_page_content_tools",
     "PAGE_CONTENT_TOOLS",
+    "EVALUATE_TOOLS",
 ]

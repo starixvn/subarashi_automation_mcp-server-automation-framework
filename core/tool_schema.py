@@ -22,7 +22,6 @@ class ToolCapability(Enum):
     FILES = "files"
     WAIT = "wait"
     PDF = "pdf"
-    TESTING = "testing"
     API = "api"
     GOOGLE_SHEETS = "google_sheets"
     DATABASE = "database"
@@ -150,7 +149,10 @@ def convert_to_google_compatible_schema(
             }
 
         if "items" in prop:
-            prop["items"] = fix_property(prop["items"])
+            if not prop["items"] or prop["items"] == {}:
+                prop["items"] = {"type": "object"}
+            else:
+                prop["items"] = fix_property(prop["items"])
 
         return prop
 

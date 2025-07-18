@@ -174,7 +174,6 @@ class MCPServer:
             self.server.set_initialized_callback(on_initialized)
 
     async def _ensure_context_started(self):
-        """Ensure browser context is initialized"""
         if not self._context_initialized:
             await self.context.start()
             self._context_initialized = True
