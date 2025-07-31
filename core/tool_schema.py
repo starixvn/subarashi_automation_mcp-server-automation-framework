@@ -1,10 +1,22 @@
-from typing import Optional, List, Dict, Any, Literal, Callable, Awaitable
+from typing import (
+    Optional,
+    List,
+    Dict,
+    Any,
+    Literal,
+    Callable,
+    Awaitable,
+    TYPE_CHECKING,
+)
 from dataclasses import dataclass
 from enum import Enum
 
 from pydantic import BaseModel
 
 from core.modal_state import ModalStateType
+
+if TYPE_CHECKING:
+    from context import ServerContext
 
 
 class ToolType(Enum):
@@ -114,7 +126,7 @@ def define_tool_factory(
     return decorator
 
 
-def convert_to_google_compatible_schema(
+def convert_to_n8n_compatible_schema(
     pydantic_schema: Dict[str, Any],
 ) -> Dict[str, Any]:
     def fix_property(prop: Dict[str, Any]) -> Dict[str, Any]:
@@ -129,11 +141,14 @@ def convert_to_google_compatible_schema(
                     is_nullable = True
                 elif option.get("type"):
                     if main_type is None:
-                        main_type = option
+                        main_type = option.copy()
 
             if main_type:
-                prop = {**prop, **main_type}
+                prop.update(main_type)
                 del prop["anyOf"]
+
+                if is_nullable and "default" not in prop:
+                    prop["nullable"] = True
 
         if isinstance(prop.get("type"), list):
             for t in prop["type"]:
@@ -154,6 +169,12 @@ def convert_to_google_compatible_schema(
             else:
                 prop["items"] = fix_property(prop["items"])
 
+        if "title" in prop and "properties" not in prop:
+            pass  # Keep title for now, might be needed
+
+        if "additionalProperties" in prop:
+            del prop["additionalProperties"]
+
         return prop
 
     result = pydantic_schema.copy()
@@ -163,25 +184,58 @@ def convert_to_google_compatible_schema(
             k: fix_property(v) for k, v in result["properties"].items()
         }
 
+    if "additionalProperties" in result:
+        del result["additionalProperties"]
+
+    if "required" in result and not isinstance(result["required"], list):
+        result["required"] = []
+
     return result
 
 
 def tool_to_mcp_schema(tool: Tool) -> Dict[str, Any]:
-    pydantic_schema = tool.schema.input_schema.model_json_schema()
+    try:
+        pydantic_schema = tool.schema.input_schema.model_json_schema()
+        compatible_schema = convert_to_n8n_compatible_schema(pydantic_schema)
+        if compatible_schema.get("type") != "object":
+            compatible_schema = {
+                "type": "object",
+                "properties": {"value": compatible_schema},
+                "required": ["value"],
+            }
 
-    compatible_schema = convert_to_google_compatible_schema(pydantic_schema)
+        if "properties" not in compatible_schema:
+            compatible_schema["properties"] = {}
 
-    return {
-        "name": tool.schema.name,
-        "description": tool.schema.description,
-        "inputSchema": compatible_schema,
-        "annotations": {
-            "title": tool.schema.title,
-            "readOnlyHint": tool.schema.tool_type == ToolType.READ_ONLY,
-            "destructiveHint": tool.schema.tool_type == ToolType.DESTRUCTIVE,
-            "openWorldHint": True,
-        },
-    }
+        mcp_schema = {
+            "name": tool.schema.name,
+            "description": tool.schema.description or "",
+            "inputSchema": compatible_schema,
+            "annotations": {
+                "title": tool.schema.title,
+                "readOnlyHint": tool.schema.tool_type == ToolType.READ_ONLY,
+                "destructiveHint": tool.schema.tool_type == ToolType.DESTRUCTIVE,
+                "openWorldHint": True,
+            },
+        }
+
+        if hasattr(tool, "clears_modal_state") and tool.clears_modal_state:
+            mcp_schema["clearsModalState"] = tool.clears_modal_state
+
+        return mcp_schema
+
+    except Exception as e:
+        return {
+            "name": tool.schema.name,
+            "description": tool.schema.description or f"Tool: {tool.schema.name}",
+            "inputSchema": {"type": "object", "properties": {}, "required": []},
+            "annotations": {
+                "title": tool.schema.title,
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "openWorldHint": True,
+            },
+        }
 
 
 def filter_tools_by_capabilities(

@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional, List
 import hashlib
+import base64
 
 from .base_service import BaseService, ServiceResult
 
@@ -41,18 +42,17 @@ class VisionService(BaseService):
                     error="Invalid quality parameter",
                 )
 
-            screenshot_options = {
-                "full_page": full_page,
+            base_options = {
                 "type": format,
                 "omit_background": omit_background,
             }
 
             if format == "jpeg":
-                screenshot_options["quality"] = quality
+                base_options["quality"] = quality
 
             if clip_region:
                 await self._validate_clip_region(clip_region)
-                screenshot_options["clip"] = clip_region
+                base_options["clip"] = clip_region
 
             if element_selector:
                 try:
@@ -65,7 +65,7 @@ class VisionService(BaseService):
                             message=f"Element not found: {element_selector}",
                             error="Element not found",
                         )
-                    screenshot_data = await element.screenshot(**screenshot_options)
+                    screenshot_data = await element.screenshot(**base_options)
                 except Exception as e:
                     return ServiceResult(
                         success=False,
@@ -73,7 +73,8 @@ class VisionService(BaseService):
                         error=str(e),
                     )
             else:
-                screenshot_data = await tab.page.screenshot(**screenshot_options)
+                page_options = {**base_options, "full_page": full_page}
+                screenshot_data = await tab.page.screenshot(**page_options)
 
             if not screenshot_data:
                 return ServiceResult(
@@ -86,10 +87,12 @@ class VisionService(BaseService):
 
             content = []
             if screenshot_data:
+                screenshot_base64 = base64.b64encode(screenshot_data).decode("utf-8")
+
                 content.append(
                     {
                         "type": "screenshot",
-                        "data": screenshot_data,
+                        "data": screenshot_base64,
                         "url": tab.page.url,
                         "format": format,
                         "size": len(screenshot_data),

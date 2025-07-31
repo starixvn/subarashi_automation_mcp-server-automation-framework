@@ -1,6 +1,6 @@
 from typing import Dict, Any, TYPE_CHECKING
+
 from core.tool_schema import (
-    define_tool,
     define_tool_factory,
     ToolCapability,
     ToolType,
@@ -10,13 +10,12 @@ from core.tool_schema import (
     ToolSchema,
 )
 from core.schemas import (
-    EmptyInputSchema,
     ClickInputSchema,
     TypeInputSchema,
     HoverInputSchema,
     SelectOptionInputSchema,
     GetTextInputSchema,
-    WaitForSelectorInputSchema,
+    GetContentsInputSchema,
     DragInputSchema,
 )
 from services.interaction_service import InteractionService
@@ -307,6 +306,109 @@ def browser_get_text_factory(capture_snapshot: bool) -> Tool:
 
 @define_tool_factory(
     capability=ToolCapability.CORE,
+    name="browser_get_contents",
+    title="Get Enhanced Contents",
+    description="Get enhanced text content with optional screenshot from web page element. Optimized for n8n integration.",
+    input_schema=GetContentsInputSchema,
+    tool_type=ToolType.READ_ONLY,
+)
+def browser_get_contents_factory(capture_snapshot: bool) -> Tool:
+    async def handle(context: "ServerContext", params: Dict[str, Any]) -> ToolResult:
+        validated_params = GetContentsInputSchema(**params)
+
+        service = InteractionService(context)
+
+        if hasattr(validated_params, "selector") and validated_params.selector:
+            target_description = f"CSS selector: {validated_params.selector}"
+        elif hasattr(validated_params, "element_ref") and validated_params.element_ref:
+            if hasattr(validated_params.element_ref, "element"):
+                element_desc = validated_params.element_ref.element
+            else:
+                element_desc = validated_params.element_ref.get("element", "Unknown")
+            target_description = f"Element: {element_desc}"
+        else:
+            target_description = "Unknown target"
+
+        code = [
+            f"# Get enhanced contents from: {target_description}",
+            f"# Preserve formatting: {validated_params.preserve_formatting}",
+            f"# Include screenshot: {validated_params.include_screenshot}",
+        ]
+
+        async def action() -> ToolActionResult:
+            try:
+                result = await service.get_contents(
+                    selector=getattr(validated_params, "selector", None),
+                    element_ref=getattr(validated_params, "element_ref", None),
+                    preserve_formatting=validated_params.preserve_formatting,
+                    normalize_whitespace=validated_params.normalize_whitespace,
+                    include_screenshot=validated_params.include_screenshot,
+                    screenshot_quality=validated_params.screenshot_quality,
+                )
+
+                if result.success:
+                    content = [
+                        {
+                            "type": "text",
+                            "text": f"Successfully extracted content from {target_description}",
+                        }
+                    ]
+
+                    if result.data and "text" in result.data:
+                        content.append(
+                            {
+                                "type": "text",
+                                "text": f"Content: {result.data['text']}",
+                            }
+                        )
+
+                    if result.data and "screenshot" in result.data:
+                        content.append(
+                            {
+                                "type": "image",
+                                "data": result.data["screenshot"],
+                                "mimeType": "image/png",
+                            }
+                        )
+
+                    return ToolActionResult(content=content)
+                else:
+                    return ToolActionResult(
+                        content=[
+                            {
+                                "type": "text",
+                                "text": f"Failed to get contents: {result.error or result.message}",
+                            }
+                        ]
+                    )
+
+            except Exception as e:
+                return ToolActionResult(
+                    content=[
+                        {"type": "text", "text": f"Tool execution error: {str(e)}"}
+                    ]
+                )
+
+        return ToolResult(
+            code=code,
+            action=action,
+            capture_snapshot=capture_snapshot,
+            wait_for_network=False,
+        )
+
+    schema = ToolSchema(
+        name="browser_get_contents",
+        title="Get Enhanced Contents",
+        description="Get enhanced text content with optional screenshot from web page element. Optimized for n8n integration.",
+        input_schema=GetContentsInputSchema,
+        tool_type=ToolType.READ_ONLY,
+    )
+
+    return Tool(capability=ToolCapability.CORE, schema=schema, handle=handle)
+
+
+@define_tool_factory(
+    capability=ToolCapability.CORE,
     name="browser_drag",
     title="Drag element",
     description="Drag element from source to target",
@@ -371,6 +473,7 @@ def get_interaction_tools(capture_snapshot: bool = True) -> list[Tool]:
         browser_hover_factory(capture_snapshot),
         browser_select_option_factory(capture_snapshot),
         browser_get_text_factory(capture_snapshot),
+        browser_get_contents_factory(capture_snapshot),
         browser_drag_factory(capture_snapshot),
     ]
 

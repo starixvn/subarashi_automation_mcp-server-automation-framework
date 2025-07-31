@@ -22,6 +22,7 @@ class Tab:
         self._on_file_chooser_callback: Optional[Callable] = None
         self._on_download_callback: Optional[Callable] = None
         self._current_snapshot: Optional[PageSnapshot] = None
+        self._is_closing: bool = False
 
         self._setup_listeners()
 
@@ -97,19 +98,40 @@ class Tab:
 
     async def title(self) -> str:
         try:
+            if self._is_closing or self.page.is_closed():
+                logger.debug("Tab/Page is closing or closed, returning default title")
+                return "Page Closed"
+
             return await self.page.title()
         except Exception as e:
-            logger.error(f"Failed to get title: {e}")
-            return "Unknown"
+            if "closed" in str(e).lower() or "target" in str(e).lower():
+                logger.debug(f"Page closed during title access: {e}")
+                return "Page Closed"
+            else:
+                logger.error(f"Failed to get title: {e}")
+                return "Unknown"
 
     def url(self) -> str:
-        return self.page.url
+        try:
+            if self._is_closing or self.page.is_closed():
+                return "about:blank"
+            return self.page.url
+        except Exception as e:
+            logger.debug(f"Failed to get URL (page likely closed): {e}")
+            return "about:blank"
 
     async def screenshot(self, full_page: bool = False) -> bytes:
         try:
+            if self.page.is_closed():
+                logger.debug("Page is closed, cannot take screenshot")
+                raise Exception("Page is closed")
+
             return await self.page.screenshot(full_page=full_page)
         except Exception as e:
-            logger.error(f"Screenshot failed: {e}")
+            if "closed" in str(e).lower() or "target" in str(e).lower():
+                logger.debug(f"Page closed during screenshot: {e}")
+            else:
+                logger.error(f"Screenshot failed: {e}")
             raise
 
     async def click(self, selector: str) -> None:
@@ -186,6 +208,7 @@ class Tab:
             raise
 
     async def close(self):
+        self._is_closing = True
         try:
             await self.page.close()
         except Exception as e:

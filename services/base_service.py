@@ -1,6 +1,6 @@
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Dict, Optional
-from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Dict, Optional, List
+from dataclasses import dataclass, asdict
 import logging
 
 if TYPE_CHECKING:
@@ -15,6 +15,15 @@ class ServiceResult:
     message: str
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+    def to_mcp_content(self) -> List[Dict[str, Any]]:
+        if self.success:
+            content = [{"type": "text", "text": self.message}]
+            if self.data:
+                content.append({"type": "text", "text": f"Data: {self.data}"})
+            return content
+        else:
+            return [{"type": "text", "text": f"Error: {self.error or self.message}"}]
 
 
 class BaseService(ABC):

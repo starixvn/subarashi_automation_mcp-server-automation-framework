@@ -155,9 +155,42 @@ class PageSnapshot:
             () => {
                 const elements = [];
                 const interactiveSelectors = [
-                    'a', 'button', 'input', 'select', 'textarea', 'label',
-                    '[onclick]', '[role="button"]', '[role="link"]', '[role="tab"]',
-                    '[role="menuitem"]', '[role="option"]', '[tabindex]'
+                    // Form elements
+                    'input', 'button', 'select', 'textarea', 'label', 'fieldset', 'legend',
+                    'option', 'optgroup', 'output', 'progress', 'meter',
+                    
+                    // Navigation & links
+                    'a', 'nav', 'area[href]',
+                    
+                    // Interactive content
+                    'details', 'summary', 'dialog',
+                    '[contenteditable="true"]', '[contenteditable=""]',
+                    
+                    // Elements with event handlers
+                    '[onclick]', '[onchange]', '[onsubmit]', '[onfocus]',
+                    '[onkeydown]', '[onkeyup]', '[onmousedown]', '[onmouseup]',
+                    
+                    // ARIA roles
+                    '[role="button"]', '[role="link"]', '[role="tab"]', '[role="tabpanel"]',
+                    '[role="menuitem"]', '[role="menuitemcheckbox"]', '[role="menuitemradio"]',
+                    '[role="option"]', '[role="checkbox"]', '[role="radio"]',
+                    '[role="slider"]', '[role="spinbutton"]', '[role="switch"]',
+                    '[role="textbox"]', '[role="searchbox"]', '[role="combobox"]',
+                    '[role="listbox"]', '[role="tree"]', '[role="treegrid"]', '[role="grid"]',
+                    '[role="gridcell"]', '[role="columnheader"]', '[role="rowheader"]',
+                    
+                    // Focusable elements
+                    '[tabindex]', '[tabindex="0"]', '[tabindex="-1"]',
+                    
+                    // Custom interactive patterns
+                    '.btn', '.button', '.clickable', '.interactive',
+                    '[data-toggle]', '[data-dismiss]', '[data-target]',
+                    
+                    // Media controls
+                    'video[controls]', 'audio[controls]', 'embed', 'object',
+                    
+                    // Semantic elements that might be interactive
+                    'h1', 'h2', 'h3', 'h4', 'h5', 'h6' // Headings for context
                 ];
                 
                 function scanDocument(doc, frameIndex = null, frameSelector = null) {
@@ -170,12 +203,144 @@ class PageSnapshot:
                             const ref = `element_${refIndex}`;
                             el.setAttribute('data-ref', ref);
                             
-                            let elementDescription = el.tagName.toLowerCase();
-                            if (el.textContent) {
-                                elementDescription += ': ' + el.textContent.trim().substring(0, 50);
-                            }
+                            // Generate smart element description
+                            let elementDescription = getSmartElementDescription(el);
                             if (frameIndex !== null) {
                                 elementDescription = `[iframe] ${elementDescription}`;
+                            }
+                            
+                            function getSmartElementDescription(element) {
+                                const tag = element.tagName.toLowerCase();
+                                const type = element.type || '';
+                                const role = element.getAttribute('role') || '';
+                                
+                                // Get the best available text/label
+                                let text = '';
+                                
+                                // Priority order for getting element text
+                                if (element.getAttribute('aria-label')) {
+                                    text = element.getAttribute('aria-label');
+                                } else if (element.getAttribute('aria-labelledby')) {
+                                    const labelId = element.getAttribute('aria-labelledby');
+                                    const labelEl = doc.getElementById(labelId);
+                                    text = labelEl ? labelEl.textContent.trim() : '';
+                                } else if (element.placeholder) {
+                                    text = element.placeholder;
+                                } else if (element.title) {
+                                    text = element.title;
+                                } else if (element.alt) {
+                                    text = element.alt;
+                                } else if (element.value && (tag === 'button' || type === 'button' || type === 'submit')) {
+                                    text = element.value;
+                                } else if (element.textContent && element.textContent.trim()) {
+                                    text = element.textContent.trim();
+                                } else if (tag === 'label' && element.htmlFor) {
+                                    const targetEl = doc.getElementById(element.htmlFor);
+                                    if (targetEl) {
+                                        text = targetEl.placeholder || targetEl.name || 'form field';
+                                    }
+                                } else if (element.name) {
+                                    text = element.name.replace(/[_-]/g, ' ');
+                                } else if (element.id) {
+                                    text = element.id.replace(/[_-]/g, ' ');
+                                }
+                                
+                                // Limit text length but keep important words
+                                if (text.length > 50) {
+                                    text = text.substring(0, 47) + '...';
+                                }
+                                
+                                // Generate semantic description based on element type
+                                let description = '';
+                                
+                                if (tag === 'input') {
+                                    switch (type) {
+                                        case 'text':
+                                        case '':
+                                            description = text ? `${text} textbox` : 'textbox';
+                                            break;
+                                        case 'password':
+                                            description = text ? `${text} password field` : 'password field';
+                                            break;
+                                        case 'email':
+                                            description = text ? `${text} email field` : 'email field';
+                                            break;
+                                        case 'tel':
+                                            description = text ? `${text} phone field` : 'phone field';
+                                            break;
+                                        case 'url':
+                                            description = text ? `${text} URL field` : 'URL field';
+                                            break;
+                                        case 'search':
+                                            description = text ? `${text} search box` : 'search box';
+                                            break;
+                                        case 'number':
+                                            description = text ? `${text} number field` : 'number field';
+                                            break;
+                                        case 'checkbox':
+                                            const checked = element.checked ? ' (checked)' : ' (unchecked)';
+                                            description = text ? `${text} checkbox${checked}` : `checkbox${checked}`;
+                                            break;
+                                        case 'radio':
+                                            const selected = element.checked ? ' (selected)' : '';
+                                            description = text ? `${text} radio button${selected}` : `radio button${selected}`;
+                                            break;
+                                        case 'submit':
+                                            description = text ? `${text} submit button` : 'submit button';
+                                            break;
+                                        case 'button':
+                                            description = text ? `${text} button` : 'button';
+                                            break;
+                                        case 'file':
+                                            description = text ? `${text} file upload` : 'file upload';
+                                            break;
+                                        case 'date':
+                                            description = text ? `${text} date picker` : 'date picker';
+                                            break;
+                                        case 'time':
+                                            description = text ? `${text} time picker` : 'time picker';
+                                            break;
+                                        case 'color':
+                                            description = text ? `${text} color picker` : 'color picker';
+                                            break;
+                                        case 'range':
+                                            description = text ? `${text} slider` : 'slider';
+                                            break;
+                                        default:
+                                            description = text ? `${text} ${type} input` : `${type} input`;
+                                    }
+                                } else if (tag === 'button') {
+                                    const buttonType = type || 'button';
+                                    description = text ? `${text} button` : `${buttonType} button`;
+                                } else if (tag === 'select') {
+                                    description = text ? `${text} dropdown` : 'dropdown';
+                                } else if (tag === 'textarea') {
+                                    description = text ? `${text} text area` : 'text area';
+                                } else if (tag === 'a') {
+                                    const href = element.href ? ` (${element.href})` : '';
+                                    description = text ? `${text} link${href}` : `link${href}`;
+                                } else if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+                                    description = text ? `${text} heading` : `${tag} heading`;
+                                } else if (tag === 'label') {
+                                    description = text ? `${text} label` : 'label';
+                                } else if (role) {
+                                    description = text ? `${text} (${role})` : role;
+                                } else {
+                                    description = text ? `${text} (${tag})` : tag;
+                                }
+                                
+                                // Add state information
+                                const states = [];
+                                if (element.disabled) states.push('disabled');
+                                if (element.readOnly) states.push('readonly');
+                                if (element.required) states.push('required');
+                                if (element.hidden) states.push('hidden');
+                                
+                                if (states.length > 0) {
+                                    description += ` [${states.join(', ')}]`;
+                                }
+                                
+                                return description;
                             }
                             
                             elements.push({
@@ -190,11 +355,55 @@ class PageSnapshot:
                                 iframe_index: frameIndex,
                                 iframe_selector: frameSelector,
                                 attributes: {
+                                    // Basic attributes
                                     id: el.id || null,
                                     class: el.className || null,
                                     type: el.type || null,
+                                    name: el.name || null,
+                                    value: el.value || null,
+                                    
+                                    // Link attributes
                                     href: el.href || null,
-                                    role: el.getAttribute('role') || null
+                                    target: el.target || null,
+                                    
+                                    // Form attributes
+                                    placeholder: el.placeholder || null,
+                                    required: el.required || null,
+                                    disabled: el.disabled || null,
+                                    readonly: el.readOnly || null,
+                                    checked: el.checked || null,
+                                    selected: el.selected || null,
+                                    multiple: el.multiple || null,
+                                    
+                                    // Accessibility attributes
+                                    role: el.getAttribute('role') || null,
+                                    'aria-label': el.getAttribute('aria-label') || null,
+                                    'aria-labelledby': el.getAttribute('aria-labelledby') || null,
+                                    'aria-describedby': el.getAttribute('aria-describedby') || null,
+                                    'aria-expanded': el.getAttribute('aria-expanded') || null,
+                                    'aria-checked': el.getAttribute('aria-checked') || null,
+                                    'aria-selected': el.getAttribute('aria-selected') || null,
+                                    'aria-hidden': el.getAttribute('aria-hidden') || null,
+                                    
+                                    // Additional useful attributes
+                                    title: el.title || null,
+                                    alt: el.alt || null,
+                                    tabindex: el.tabIndex !== -1 ? el.tabIndex : null,
+                                    
+                                    // Data attributes (for custom functionality)
+                                    'data-toggle': el.getAttribute('data-toggle') || null,
+                                    'data-target': el.getAttribute('data-target') || null,
+                                    'data-dismiss': el.getAttribute('data-dismiss') || null,
+                                    
+                                    // Computed properties
+                                    visible: rect.width > 0 && rect.height > 0,
+                                    enabled: !el.disabled,
+                                    focusable: el.tabIndex >= 0 || ['input', 'button', 'select', 'textarea', 'a'].includes(el.tagName.toLowerCase()),
+                                    
+                                    // Element context
+                                    tag_name: el.tagName.toLowerCase(),
+                                    text_content: el.textContent ? el.textContent.trim().substring(0, 100) : null,
+                                    inner_text: el.innerText ? el.innerText.trim().substring(0, 100) : null
                                 }
                             });
                         }

@@ -55,6 +55,59 @@ class GetTextInputSchema(ToolInputSchema):
     selector: str = Field(description="CSS selector for the element")
 
 
+class GetContentsInputSchema(ToolInputSchema):
+    selector: Optional[str] = Field(
+        default=None,
+        description="CSS selector for static elements (body, .main, #content). Use for page-level content extraction.",
+    )
+
+    element_ref: Optional[ElementInputSchema] = Field(
+        default=None,
+        description="Element reference from snapshot {element: 'description', ref: 'element_X'}. Use for specific interactive elements.",
+    )
+
+    preserve_formatting: Optional[bool] = Field(
+        default=True,
+        description="Use innerText to preserve visual formatting (recommended for web-like text)",
+    )
+    normalize_whitespace: Optional[bool] = Field(
+        default=False,
+        description="Normalize whitespace: True=flatten to single line, False=preserve line breaks as they appear on web",
+    )
+    include_screenshot: Optional[bool] = Field(
+        default=False,
+        description="Include screenshot of the element along with text content",
+    )
+    screenshot_quality: Optional[int] = Field(
+        default=80,
+        ge=1,
+        le=100,
+        description="Screenshot quality (1-100, higher is better quality)",
+    )
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        selector = getattr(self, "selector", None)
+        element_ref = getattr(self, "element_ref", None)
+
+        if not selector and not element_ref:
+            raise ValueError("Either 'selector' or 'element_ref' must be provided")
+
+        if selector and element_ref:
+            raise ValueError("Provide either 'selector' OR 'element_ref', not both")
+
+    @field_validator("screenshot_quality", mode="before")
+    @classmethod
+    def convert_string_to_int(cls, v):
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                pass
+        return v
+
+
 class WaitForSelectorInputSchema(ToolInputSchema):
     selector: str = Field(description="CSS selector to wait for")
     timeout: Optional[float] = Field(
@@ -94,7 +147,6 @@ class ScreenshotInputSchema(ToolInputSchema):
     @field_validator("full_page", "omit_background", mode="before")
     @classmethod
     def convert_string_to_bool(cls, v):
-        """Convert string representations to boolean for LLM compatibility"""
         if isinstance(v, str):
             if v.lower() in ("true", "1", "yes", "on"):
                 return True
@@ -105,7 +157,6 @@ class ScreenshotInputSchema(ToolInputSchema):
     @field_validator("quality", mode="before")
     @classmethod
     def convert_string_to_int(cls, v):
-        """Convert string representations to int for LLM compatibility"""
         if isinstance(v, str):
             try:
                 return int(v)
@@ -203,8 +254,6 @@ class SaveScreenshotInputSchema(ToolInputSchema):
 
 
 class PdfInputSchema(ToolInputSchema):
-    """Schema for PDF generation operations"""
-
     filename: str = Field(description="Filename for the PDF file")
     full_page: Optional[bool] = Field(default=True, description="Save full page as PDF")
     format: Optional[Literal["A4", "A3", "Letter", "Legal"]] = Field(
@@ -243,7 +292,6 @@ class PdfInputSchema(ToolInputSchema):
         if ".." in v or os.path.isabs(v):
             raise ValueError("Filename cannot contain '..' or be absolute path")
 
-        # For PDF files, ensure .pdf extension
         if not v.lower().endswith(".pdf"):
             v += ".pdf"
 
@@ -256,7 +304,6 @@ class PdfInputSchema(ToolInputSchema):
             required_keys = {"top", "right", "bottom", "left"}
             if not all(key in v for key in required_keys):
                 raise ValueError("margin must contain top, right, bottom, left")
-            # Validate margin values are valid CSS units
             for key, value in v.items():
                 if not isinstance(value, str) or not value.strip():
                     raise ValueError(f"margin.{key} must be a non-empty string")
@@ -577,8 +624,6 @@ class DatabaseCloseInputSchema(ToolInputSchema):
 
 
 class GetPageHtmlInputSchema(ToolInputSchema):
-    """Input schema for getting complete page HTML optimized for element mapping"""
-
     format_html: bool = Field(
         default=True, description="Format HTML with line breaks for readability"
     )

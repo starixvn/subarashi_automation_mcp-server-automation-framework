@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from .base_service import BaseService
 
 if TYPE_CHECKING:
@@ -18,6 +18,9 @@ class SnapshotService(BaseService):
             )
             main_elements_count = len(element_refs) - iframe_elements_count
 
+            element_categories = self._categorize_elements(element_refs)
+            detailed_elements = self._get_detailed_element_info(element_refs)
+
             return self.success_response(
                 data={
                     "url": snapshot.url(),
@@ -27,8 +30,13 @@ class SnapshotService(BaseService):
                     "main_elements_count": main_elements_count,
                     "iframe_elements_count": iframe_elements_count,
                     "snapshot_text": snapshot.text(),
+                    "element_categories": element_categories,
+                    "detailed_elements": detailed_elements,
+                    "accessibility_tree": snapshot.accessibility_tree_summary()
+                    if hasattr(snapshot, "accessibility_tree_summary")
+                    else None,
                 },
-                message=f"Snapshot captured for {snapshot.url()} (Elements: {main_elements_count} main + {iframe_elements_count} iframe)",
+                message=f"Enhanced snapshot captured for {snapshot.url()} (Elements: {main_elements_count} main + {iframe_elements_count} iframe, Categories: {len(element_categories)})",
             )
 
         except Exception as e:
@@ -226,3 +234,145 @@ class SnapshotService(BaseService):
 
         except Exception as e:
             return await self.handle_error(e, "get_snapshot_summary")
+
+    def _categorize_elements(self, element_refs: Dict[str, Any]) -> Dict[str, Any]:
+        categories = {
+            "form_inputs": [],
+            "buttons": [],
+            "links": [],
+            "navigation": [],
+            "headings": [],
+            "interactive_content": [],
+            "media": [],
+            "custom_controls": [],
+            "accessibility_elements": [],
+        }
+
+        for ref, elem in element_refs.items():
+            tag = (elem.tag_name or "").lower()
+            attrs = elem.attributes or {}
+            element_type = (attrs.get("type") or "").lower()
+            role = (attrs.get("role") or "").lower()
+
+            if tag == "input":
+                categories["form_inputs"].append(
+                    {
+                        "ref": elem.ref,
+                        "description": elem.element,
+                        "type": element_type,
+                        "required": attrs.get("required", False),
+                        "disabled": attrs.get("disabled", False),
+                    }
+                )
+            elif tag == "button" or element_type in ["button", "submit", "reset"]:
+                categories["buttons"].append(
+                    {
+                        "ref": elem.ref,
+                        "description": elem.element,
+                        "type": element_type or "button",
+                        "disabled": attrs.get("disabled", False),
+                    }
+                )
+            elif tag == "a" or role == "link":
+                categories["links"].append(
+                    {
+                        "ref": elem.ref,
+                        "description": elem.element,
+                        "href": attrs.get("href"),
+                        "target": attrs.get("target"),
+                    }
+                )
+            elif tag in ["nav"] or role in ["navigation", "menu", "menubar"]:
+                categories["navigation"].append(
+                    {"ref": elem.ref, "description": elem.element, "role": role or tag}
+                )
+            elif tag in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+                categories["headings"].append(
+                    {"ref": elem.ref, "description": elem.element, "level": tag}
+                )
+            elif tag in ["select", "textarea", "label"]:
+                categories["form_inputs"].append(
+                    {
+                        "ref": elem.ref,
+                        "description": elem.element,
+                        "type": tag,
+                        "required": attrs.get("required", False),
+                        "disabled": attrs.get("disabled", False),
+                    }
+                )
+            elif tag in ["video", "audio", "embed", "object"]:
+                categories["media"].append(
+                    {"ref": elem.ref, "description": elem.element, "type": tag}
+                )
+            elif role in ["button", "tab", "menuitem", "option", "slider", "switch"]:
+                categories["custom_controls"].append(
+                    {
+                        "ref": elem.ref,
+                        "description": elem.element,
+                        "role": role,
+                        "aria_label": attrs.get("aria-label"),
+                    }
+                )
+            elif attrs.get("aria-label") or attrs.get("aria-labelledby"):
+                categories["accessibility_elements"].append(
+                    {
+                        "ref": elem.ref,
+                        "description": elem.element,
+                        "aria_label": attrs.get("aria-label"),
+                        "aria_labelledby": attrs.get("aria-labelledby"),
+                    }
+                )
+            else:
+                categories["interactive_content"].append(
+                    {
+                        "ref": elem.ref,
+                        "description": elem.element,
+                        "tag": tag,
+                        "role": role,
+                    }
+                )
+
+        category_summary = {
+            category: len(items) for category, items in categories.items()
+        }
+
+        return {"summary": category_summary, "details": categories}
+
+    def _get_detailed_element_info(
+        self, element_refs: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        detailed_elements = []
+
+        for ref, elem in element_refs.items():
+            attrs = elem.attributes or {}
+
+            element_info = {
+                "ref": elem.ref,
+                "description": elem.element,
+                "position": {"x": elem.x, "y": elem.y},
+                "size": {"width": elem.width, "height": elem.height},
+                "tag": elem.tag_name,
+                "text": elem.text,
+                "key_attributes": {
+                    "id": attrs.get("id"),
+                    "class": attrs.get("class"),
+                    "type": attrs.get("type"),
+                    "name": attrs.get("name"),
+                    "placeholder": attrs.get("placeholder"),
+                    "role": attrs.get("role"),
+                    "aria_label": attrs.get("aria-label"),
+                    "disabled": attrs.get("disabled", False),
+                    "required": attrs.get("required", False),
+                    "visible": attrs.get("visible", True),
+                    "focusable": attrs.get("focusable", False),
+                },
+                "iframe_context": {
+                    "is_iframe": elem.iframe_index is not None,
+                    "iframe_index": elem.iframe_index,
+                    "iframe_selector": elem.iframe_selector,
+                },
+            }
+
+            detailed_elements.append(element_info)
+
+        return detailed_elements

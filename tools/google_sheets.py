@@ -88,7 +88,7 @@ class ReadRangeInput(ToolInputSchema):
 class WriteRangeInput(ToolInputSchema):
     spreadsheet_id: str = Field(description="Spreadsheet ID")
     range_name: str = Field(description="Range to write (e.g., 'Sheet1!A1:C10')")
-    values: List[List[Any]] = Field(description="2D array of values to write")
+    values: List[Any] = Field(description="List of values to write")
     major_dimension: Optional[str] = Field(
         default="ROWS", description="Major dimension: ROWS or COLUMNS"
     )
@@ -103,7 +103,7 @@ class UpdateCellInput(ToolInputSchema):
 class AppendDataInput(ToolInputSchema):
     spreadsheet_id: str = Field(description="Spreadsheet ID")
     range_name: str = Field(description="Range to append to (e.g., 'Sheet1!A:A')")
-    values: List[List[Any]] = Field(description="2D array of values to append")
+    values: List[Any] = Field(description="List of values to append")
     value_input_option: Optional[str] = Field(
         default="RAW", description="RAW or USER_ENTERED"
     )
