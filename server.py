@@ -263,7 +263,12 @@ class MCPServer:
         class MessagesApp:
             async def __call__(self, scope, receive, send):
                 if scope["type"] == "http" and scope["method"] == "POST":
-                    await sse_transport.handle_post_message(scope, receive, send)
+                    try:
+                        await sse_transport.handle_post_message(scope, receive, send)
+                    except Exception as e:
+                        logger.error(f"Error in SSE connection: {e}")
+                        response = Response(status_code=500)
+                        await response(scope, receive, send)
                 else:
                     response = Response(status_code=405)
                     await response(scope, receive, send)

@@ -129,24 +129,93 @@ def define_tool_factory(
 def convert_to_n8n_compatible_schema(
     pydantic_schema: Dict[str, Any],
 ) -> Dict[str, Any]:
+    defs = pydantic_schema.get("$defs", {})
+
+    def resolve_ref(ref_path: str) -> Dict[str, Any]:
+        if ref_path.startswith("#/$defs/"):
+            def_name = ref_path[8:]
+            if def_name in defs:
+                return defs[def_name].copy()
+        return {"type": "object"}
+
     def fix_property(prop: Dict[str, Any]) -> Dict[str, Any]:
         prop = prop.copy()
+
+        if "$ref" in prop:
+            resolved = resolve_ref(prop["$ref"])
+            prop = fix_property(resolved)
+            return prop
 
         if "anyOf" in prop:
             main_type = None
             is_nullable = False
+            ref_resolved = None
+            preferred_type = None
 
-            for option in prop["anyOf"]:
+            def flatten_anyof_options(options, depth=0):
+                if depth > 3:
+                    return options
+
+                flattened = []
+                for option in options:
+                    if "anyOf" in option:
+                        constraints = {k: v for k, v in option.items() if k != "anyOf"}
+                        nested_options = flatten_anyof_options(
+                            option["anyOf"], depth + 1
+                        )
+                        for nested_option in nested_options:
+                            merged_option = nested_option.copy()
+                            merged_option.update(constraints)
+                            flattened.append(merged_option)
+                    else:
+                        flattened.append(option)
+                return flattened
+
+            flattened_options = flatten_anyof_options(prop["anyOf"])
+
+            for option in flattened_options:
                 if option.get("type") == "null":
                     is_nullable = True
+                elif "$ref" in option:
+                    ref_resolved = resolve_ref(option["$ref"])
                 elif option.get("type"):
-                    if main_type is None:
+                    option_type = option.get("type")
+                    if option_type in [
+                        "integer",
+                        "number",
+                        "boolean",
+                        "array",
+                        "object",
+                    ]:
+                        preferred_type = option.copy()
+                    elif main_type is None:
                         main_type = option.copy()
+                elif "anyOf" not in option and not option.get("type"):
+                    if preferred_type and not preferred_type.get("constraints_added"):
+                        preferred_type.update(
+                            {
+                                k: v
+                                for k, v in option.items()
+                                if k not in ["type", "anyOf"]
+                            }
+                        )
+                        preferred_type["constraints_added"] = True
 
-            if main_type:
+            if ref_resolved:
+                prop.update(fix_property(ref_resolved))
+                del prop["anyOf"]
+                if is_nullable:
+                    prop["nullable"] = True
+            elif preferred_type:
+                del prop["anyOf"]
+                if "constraints_added" in preferred_type:
+                    del preferred_type["constraints_added"]
+                prop.update(preferred_type)
+                if is_nullable and "default" not in prop:
+                    prop["nullable"] = True
+            elif main_type:
                 prop.update(main_type)
                 del prop["anyOf"]
-
                 if is_nullable and "default" not in prop:
                     prop["nullable"] = True
 
@@ -169,15 +238,24 @@ def convert_to_n8n_compatible_schema(
             else:
                 prop["items"] = fix_property(prop["items"])
 
-        if "title" in prop and "properties" not in prop:
-            pass  # Keep title for now, might be needed
-
         if "additionalProperties" in prop:
             del prop["additionalProperties"]
+
+        if "ge" in prop:
+            prop["minimum"] = prop.pop("ge")
+        if "le" in prop:
+            prop["maximum"] = prop.pop("le")
+        if "gt" in prop:
+            prop["exclusiveMinimum"] = prop.pop("gt")
+        if "lt" in prop:
+            prop["exclusiveMaximum"] = prop.pop("lt")
 
         return prop
 
     result = pydantic_schema.copy()
+
+    if "$defs" in result:
+        del result["$defs"]
 
     if "properties" in result:
         result["properties"] = {
