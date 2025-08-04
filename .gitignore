@@ -17,3 +17,4 @@ mcp_output/
 storage_state.json
 playwright/
 playwright-mcp/
+_mcp/

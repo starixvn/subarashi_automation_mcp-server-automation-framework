@@ -260,8 +260,13 @@ class MCPServer:
                     traceback.print_exc()
             return Response()
 
-        async def handle_messages(scope, receive, send):
-            await sse_transport.handle_post_message(scope, receive, send)
+        class MessagesApp:
+            async def __call__(self, scope, receive, send):
+                if scope["type"] == "http" and scope["method"] == "POST":
+                    await sse_transport.handle_post_message(scope, receive, send)
+                else:
+                    response = Response(status_code=405)
+                    await response(scope, receive, send)
 
         async def health_endpoint(request):
             return JSONResponse(
@@ -287,8 +292,7 @@ class MCPServer:
             routes=[
                 Route("/", endpoint=root_endpoint, methods=["GET"]),
                 Route("/sse", endpoint=handle_sse, methods=["GET"]),
-                Route("/messages", endpoint=handle_messages, methods=["POST"]),
-                Route("/messages/", endpoint=handle_messages, methods=["POST"]),
+                Mount("/messages", app=MessagesApp()),
                 Route("/health", endpoint=health_endpoint, methods=["GET"]),
             ]
         )
