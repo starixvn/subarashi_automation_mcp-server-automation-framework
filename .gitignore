@@ -15,3 +15,5 @@ logs/
 *.log
 mcp_output/
 storage_state.json
+playwright/
+playwright-mcp/
