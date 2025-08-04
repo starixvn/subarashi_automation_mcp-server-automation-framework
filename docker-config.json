@@ -42,13 +42,13 @@
     "keyboard",
     "network",
     "files",
-    "testing",
     "wait",
     "pdf",
     "history",
     "api",
     "google_sheets",
-    "database"
+    "database",
+    "page_content"
   ],
   "vision": true,
   "save_trace": false,

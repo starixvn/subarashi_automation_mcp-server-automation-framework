@@ -287,7 +287,8 @@ class MCPServer:
             routes=[
                 Route("/", endpoint=root_endpoint, methods=["GET"]),
                 Route("/sse", endpoint=handle_sse, methods=["GET"]),
-                Mount("/messages", app=handle_messages),
+                Route("/messages", endpoint=handle_messages, methods=["POST"]),
+                Route("/messages/", endpoint=handle_messages, methods=["POST"]),
                 Route("/health", endpoint=health_endpoint, methods=["GET"]),
             ]
         )
