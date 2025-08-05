@@ -211,13 +211,17 @@ def convert_to_n8n_compatible_schema(
                 if "constraints_added" in preferred_type:
                     del preferred_type["constraints_added"]
                 prop.update(preferred_type)
-                if is_nullable and "default" not in prop:
-                    prop["nullable"] = True
+                if is_nullable:
+                    base_type = preferred_type.get("type")
+                    if base_type:
+                        prop["type"] = [base_type, "null"]
             elif main_type:
                 prop.update(main_type)
                 del prop["anyOf"]
-                if is_nullable and "default" not in prop:
-                    prop["nullable"] = True
+                if is_nullable:
+                    base_type = main_type.get("type")
+                    if base_type:
+                        prop["type"] = [base_type, "null"]
 
         if isinstance(prop.get("type"), list):
             type_list = prop["type"]
@@ -264,6 +268,22 @@ def convert_to_n8n_compatible_schema(
             base_type = prop.get("type")
             prop["type"] = [base_type, "null"]
             del prop["nullable"]
+        if (
+            prop.get("type") == "string"
+            and prop.get("default") is None
+            and not prop.get("nullable")
+            and not isinstance(prop.get("type"), list)
+        ):
+            prop["type"] = ["string", "null"]
+
+        if (
+            prop.get("type") in ["integer", "number", "boolean", "array", "object"]
+            and prop.get("default") is None
+            and not prop.get("nullable")
+            and not isinstance(prop.get("type"), list)
+        ):
+            base_type = prop.get("type")
+            prop["type"] = [base_type, "null"]
 
         return prop
 
