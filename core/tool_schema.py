@@ -220,12 +220,16 @@ def convert_to_n8n_compatible_schema(
                     prop["nullable"] = True
 
         if isinstance(prop.get("type"), list):
-            for t in prop["type"]:
-                if t != "null":
-                    prop["type"] = t
-                    break
+            type_list = prop["type"]
+            if "null" in type_list and len(type_list) == 2:
+                pass
             else:
-                prop["type"] = "string"
+                for t in type_list:
+                    if t != "null":
+                        prop["type"] = t
+                        break
+                else:
+                    prop["type"] = "string"
 
         if "properties" in prop:
             prop["properties"] = {
@@ -249,6 +253,17 @@ def convert_to_n8n_compatible_schema(
             prop["exclusiveMinimum"] = prop.pop("gt")
         if "lt" in prop:
             prop["exclusiveMaximum"] = prop.pop("lt")
+        if prop.get("nullable") and prop.get("type") in [
+            "object",
+            "array",
+            "string",
+            "integer",
+            "number",
+            "boolean",
+        ]:
+            base_type = prop.get("type")
+            prop["type"] = [base_type, "null"]
+            del prop["nullable"]
 
         return prop
 
