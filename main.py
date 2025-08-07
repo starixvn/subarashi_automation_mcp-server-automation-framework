@@ -68,7 +68,7 @@ async def main():
             raise
         finally:
             try:
-                await server.context.close()
+                await server.cleanup_context()
             except Exception as e:
                 logger.error(f"Error during cleanup: {e}")
 

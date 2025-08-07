@@ -95,10 +95,24 @@ class BaseBrowserContextFactory(BrowserContextFactory):
         logger.debug(f"Obtaining browser ({self.name})")
         self._browser_promise = asyncio.create_task(self._do_obtain_browser())
 
-        browser = await self._browser_promise
-        browser.on("disconnected", lambda: setattr(self, "_browser_promise", None))
-
-        return browser
+        try:
+            browser = await asyncio.wait_for(self._browser_promise, timeout=30.0)
+            browser.on("disconnected", lambda: setattr(self, "_browser_promise", None))
+            return browser
+        except asyncio.TimeoutError:
+            logger.error(f"Browser startup timeout after 30s ({self.name})")
+            if self._browser_promise:
+                self._browser_promise.cancel()
+                self._browser_promise = None
+            raise Exception(
+                "Browser startup timeout - server may lack display/resources"
+            )
+        except Exception as e:
+            logger.error(f"Browser startup failed ({self.name}): {e}")
+            if self._browser_promise:
+                self._browser_promise.cancel()
+                self._browser_promise = None
+            raise Exception(f"Browser startup failed: {e}")
 
     @abstractmethod
     async def _do_obtain_browser(self) -> Browser:
@@ -106,8 +120,29 @@ class BaseBrowserContextFactory(BrowserContextFactory):
 
     async def create_context(self) -> BrowserContextResult:
         logger.debug(f"Creating browser context ({self.name})")
-        browser = await self._obtain_browser()
-        browser_context = await self._do_create_context(browser)
+        try:
+            browser = await self._obtain_browser()
+        except Exception as e:
+            logger.error(f"Failed to obtain browser: {e}")
+            if "timeout" in str(e).lower():
+                raise Exception(
+                    "Browser startup timeout. On server: ensure headless=true, install browser dependencies, and check system resources."
+                )
+            else:
+                raise Exception(
+                    f"Browser initialization failed: {e}. Check if browser binaries are installed and system has sufficient resources."
+                )
+
+        try:
+            browser_context = await asyncio.wait_for(
+                self._do_create_context(browser), timeout=15.0
+            )
+        except asyncio.TimeoutError:
+            logger.error("Browser context creation timeout")
+            raise Exception("Browser context timeout - check browser stability")
+        except Exception as e:
+            logger.error(f"Browser context creation failed: {e}")
+            raise Exception(f"Context creation failed: {e}")
 
         async def close_func():
             await self._close_browser_context(browser_context, browser)
@@ -217,8 +252,6 @@ class PersistentContextFactory(BrowserContextFactory):
 
         context_options = {"viewport": {"width": 1280, "height": 720}}
 
-        # Note: launch_persistent_context() doesn't support storage_state parameter
-        # Storage state is handled automatically by the persistent user data directory
         if hasattr(self.settings, "storage_state") and self.settings.storage_state:
             logger.info(
                 f"PersistentContextFactory: storage_state ignored (using persistent user data directory)"

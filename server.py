@@ -139,6 +139,8 @@ class MCPServer:
     ):
         self.settings = settings or Settings()
         self.capabilities = capabilities
+        self._cached_context: Optional[ServerContext] = None
+        self._context_lock = asyncio.Lock()
 
     def create_initialization_options(self) -> InitializationOptions:
         return InitializationOptions(
@@ -152,9 +154,33 @@ class MCPServer:
             ),
         )
 
+    async def get_or_create_context(self) -> ServerContext:
+        if self._cached_context is None:
+            async with self._context_lock:
+                if self._cached_context is None:
+                    logger.info("Creating cached ServerContext (first time)")
+                    self._cached_context = ServerContext(
+                        self.settings, capabilities=self.capabilities
+                    )
+                    await self._cached_context.start()
+                    logger.info("Cached ServerContext ready")
+        return self._cached_context
+
+    async def cleanup_context(self):
+        if self._cached_context:
+            logger.info("Cleaning up cached ServerContext")
+            await self._cached_context.close()
+            self._cached_context = None
+
     def setup_exit_watchdog(self):
         def handle_exit():
             logger.info("Server shutting down...")
+
+            if self._cached_context:
+                try:
+                    asyncio.run(self.cleanup_context())
+                except:
+                    pass
             sys.exit(0)
 
         signal.signal(signal.SIGINT, lambda s, f: handle_exit())
@@ -165,9 +191,7 @@ class MCPServer:
         logger.info(f"Starting STDIO MCP server for session: {session_id}")
 
         async with stdio_server() as (read_stream, write_stream):
-            context = ServerContext(self.settings, capabilities=self.capabilities)
-            await context.start()
-
+            context = await self.get_or_create_context()
             server = create_server(self.settings, self.capabilities, context)
 
             try:
@@ -175,8 +199,7 @@ class MCPServer:
                     read_stream, write_stream, self.create_initialization_options()
                 )
             finally:
-                if hasattr(context, "close"):
-                    await context.close()
+                pass
 
     async def run_websocket(self, host: str = "localhost", port: int = 8765):
         async def websocket_endpoint(websocket):
@@ -193,11 +216,7 @@ class MCPServer:
                 async with websocket_server(
                     websocket.scope, websocket.receive, websocket.send
                 ) as (read_stream, write_stream):
-                    context = ServerContext(
-                        self.settings, capabilities=self.capabilities
-                    )
-                    await context.start()
-
+                    context = await self.get_or_create_context()
                     server = create_server(self.settings, self.capabilities, context)
 
                     try:
@@ -207,8 +226,7 @@ class MCPServer:
                             self.create_initialization_options(),
                         )
                     finally:
-                        if hasattr(context, "close"):
-                            await context.close()
+                        pass
             finally:
                 logger.info(f"WebSocket connection closed for session: {session_id}")
 
@@ -232,13 +250,9 @@ class MCPServer:
                 async with sse_transport.connect_sse(
                     request.scope, request.receive, request._send
                 ) as (read_stream, write_stream):
-                    logger.info("Starting isolated MCP server instance")
+                    logger.info("Using cached MCP server instance")
 
-                    context = ServerContext(
-                        self.settings, capabilities=self.capabilities
-                    )
-                    await context.start()
-
+                    context = await self.get_or_create_context()
                     server = create_server(self.settings, self.capabilities, context)
 
                     try:
@@ -248,9 +262,7 @@ class MCPServer:
                             self.create_initialization_options(),
                         )
                     finally:
-                        logger.info("SSE connection closed, cleaning up context")
-                        if hasattr(context, "close"):
-                            await context.close()
+                        logger.info("SSE connection closed, keeping cached context")
 
             except (Exception, asyncio.CancelledError) as e:
                 if isinstance(e, asyncio.CancelledError):
@@ -330,9 +342,7 @@ class MCPServer:
                 )
                 session_transports[session_id] = transport
 
-                context = ServerContext(self.settings, capabilities=self.capabilities)
-                await context.start()
-
+                context = await self.get_or_create_context()
                 server = create_server(self.settings, self.capabilities, context)
 
                 async def run_session_server():
@@ -344,8 +354,7 @@ class MCPServer:
                                 self.create_initialization_options(),
                             )
                         finally:
-                            if hasattr(context, "close"):
-                                await context.close()
+                            pass
 
                 asyncio.create_task(run_session_server())
             else:

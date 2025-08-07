@@ -204,36 +204,23 @@ def convert_to_n8n_compatible_schema(
             if ref_resolved:
                 prop.update(fix_property(ref_resolved))
                 del prop["anyOf"]
-                if is_nullable:
-                    prop["nullable"] = True
             elif preferred_type:
                 del prop["anyOf"]
                 if "constraints_added" in preferred_type:
                     del preferred_type["constraints_added"]
                 prop.update(preferred_type)
-                if is_nullable:
-                    base_type = preferred_type.get("type")
-                    if base_type:
-                        prop["type"] = [base_type, "null"]
             elif main_type:
                 prop.update(main_type)
                 del prop["anyOf"]
-                if is_nullable:
-                    base_type = main_type.get("type")
-                    if base_type:
-                        prop["type"] = [base_type, "null"]
 
         if isinstance(prop.get("type"), list):
             type_list = prop["type"]
-            if "null" in type_list and len(type_list) == 2:
-                pass
+            for t in type_list:
+                if t != "null":
+                    prop["type"] = t
+                    break
             else:
-                for t in type_list:
-                    if t != "null":
-                        prop["type"] = t
-                        break
-                else:
-                    prop["type"] = "string"
+                prop["type"] = "string"
 
         if "properties" in prop:
             prop["properties"] = {
@@ -257,33 +244,8 @@ def convert_to_n8n_compatible_schema(
             prop["exclusiveMinimum"] = prop.pop("gt")
         if "lt" in prop:
             prop["exclusiveMaximum"] = prop.pop("lt")
-        if prop.get("nullable") and prop.get("type") in [
-            "object",
-            "array",
-            "string",
-            "integer",
-            "number",
-            "boolean",
-        ]:
-            base_type = prop.get("type")
-            prop["type"] = [base_type, "null"]
+        if "nullable" in prop:
             del prop["nullable"]
-        if (
-            prop.get("type") == "string"
-            and prop.get("default") is None
-            and not prop.get("nullable")
-            and not isinstance(prop.get("type"), list)
-        ):
-            prop["type"] = ["string", "null"]
-
-        if (
-            prop.get("type") in ["integer", "number", "boolean", "array", "object"]
-            and prop.get("default") is None
-            and not prop.get("nullable")
-            and not isinstance(prop.get("type"), list)
-        ):
-            base_type = prop.get("type")
-            prop["type"] = [base_type, "null"]
 
         return prop
 

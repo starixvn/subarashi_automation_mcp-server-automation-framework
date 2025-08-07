@@ -1,8 +1,11 @@
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from typing import List, Optional, TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from .settings import (
     CLIOptions,
@@ -257,12 +260,22 @@ def parse_enhanced_args(args: Optional[List[str]] = None) -> CLIOptions:
     cli_options.transport = parsed_args.transport  # type: ignore
     cli_options.list_capabilities = parsed_args.list_capabilities  # type: ignore
     if not cli_options.storage_state and cli_options.transport == "stdio":
-        cli_options.storage_state = "config/keys/storage_state.json"
+        default_storage = "config/keys/storage_state.json"
+        if os.path.exists(default_storage):
+            cli_options.storage_state = default_storage
+        else:
+            logger.warning(f"Default storage state file not found: {default_storage}")
+            logger.info("Server will run without authentication state")
 
     return cli_options
 
 
 def validate_cli_options(cli_options: CLIOptions):
+    if cli_options.storage_state and not os.path.exists(cli_options.storage_state):
+        logger.warning(f"Storage state file not found: {cli_options.storage_state}")
+        logger.info("Server will run without authentication state")
+        cli_options.storage_state = None
+
     if cli_options.device and cli_options.cdp_endpoint:
         raise ValueError("Device emulation is not supported with cdpEndpoint.")
     if cli_options.device and cli_options.extension:

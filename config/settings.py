@@ -26,7 +26,9 @@ class Settings:
         if output_dir:
             self.output_dir = Path(output_dir)
         else:
-            self.output_dir = Path.cwd() / "mcp_output"
+            timestamp = datetime.now().isoformat().replace(":", "-").replace(".", "-")
+            project_root = Path(__file__).parent.parent
+            self.output_dir = project_root / "mcp_output" / timestamp
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -154,9 +156,8 @@ class FullConfig(Config):
     def __post_init__(self):
         if not self.output_dir:
             timestamp = datetime.now().isoformat().replace(":", "-").replace(".", "-")
-            self.output_dir = str(
-                Path(tempfile.gettempdir()) / "mcp-automation-output" / timestamp
-            )
+            project_root = Path(__file__).parent.parent
+            self.output_dir = str(project_root / "mcp_output" / timestamp)
 
 
 def sanitize_for_file_path(name: str) -> str:
@@ -168,18 +169,18 @@ def sanitize_for_file_path(name: str) -> str:
 
 def get_default_config() -> FullConfig:
     timestamp = datetime.now().isoformat().replace(":", "-").replace(".", "-")
-    output_dir = str(
-        Path(tempfile.gettempdir())
-        / "mcp-automation-output"
-        / sanitize_for_file_path(timestamp)
-    )
+    project_root = Path(__file__).parent.parent
+    output_dir = str(project_root / "mcp_output" / sanitize_for_file_path(timestamp))
 
     return FullConfig(
         browser=BrowserConfig(
             browser_name="chromium",
             launch_options=LaunchOptions(
                 channel="chrome",
-                headless=os.name == "posix" and not os.environ.get("DISPLAY"),
+                # Always headless on server/CI, allow GUI on local dev
+                headless=os.name == "posix"
+                and not os.environ.get("DISPLAY")
+                and not os.environ.get("FORCE_GUI"),
                 chromium_sandbox=True,
             ),
             context_options=ContextOptions(
