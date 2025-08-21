@@ -1,11 +1,9 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Any, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING
 from pathlib import Path
 import tempfile
-import os
-
 from playwright.async_api import async_playwright, Browser, BrowserContext, Playwright
 
 if TYPE_CHECKING:
@@ -213,9 +211,6 @@ class IsolatedContextFactory(BaseBrowserContextFactory):
         context_options = {"viewport": {"width": 1280, "height": 720}}
 
         if hasattr(self.settings, "storage_state") and self.settings.storage_state:
-            logger.info(
-                f"IsolatedContextFactory using storage_state: {self.settings.storage_state}"
-            )
             context_options["storage_state"] = self.settings.storage_state
 
         return await browser.new_context(**context_options)
@@ -254,7 +249,7 @@ class PersistentContextFactory(BrowserContextFactory):
 
         if hasattr(self.settings, "storage_state") and self.settings.storage_state:
             logger.info(
-                f"PersistentContextFactory: storage_state ignored (using persistent user data directory)"
+                "PersistentContextFactory: storage_state ignored (using persistent user data directory)"
             )
 
         options = {**launch_options, **context_options}
@@ -310,9 +305,12 @@ class PersistentContextFactory(BrowserContextFactory):
 
     async def _create_user_data_dir(self) -> str:
         temp_dir = Path(tempfile.gettempdir())
-
         mcp_dir = temp_dir / "mcp-automation-server"
-        profile_dir = mcp_dir / f"{self.settings.browser_type}-profile"
+
+        import uuid
+
+        unique_suffix = uuid.uuid4().hex[:8]
+        profile_dir = mcp_dir / f"{self.settings.browser_type}-profile-{unique_suffix}"
 
         profile_dir.mkdir(parents=True, exist_ok=True)
         return str(profile_dir)
@@ -380,7 +378,6 @@ def create_browser_context_factory(
         return IsolatedContextFactory(settings)
 
     if hasattr(settings, "storage_state") and settings.storage_state:
-        logger.info("Using IsolatedContextFactory because storage_state is provided")
         return IsolatedContextFactory(settings)
 
     persistent = kwargs.get("persistent", True)

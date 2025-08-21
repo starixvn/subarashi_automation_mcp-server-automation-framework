@@ -1,114 +1,56 @@
-import logging
-from typing import Dict, List, Optional, Any
-from urllib.parse import urlparse
+"""FastMCP compliant resource management using library patterns."""
 
-from .models import Resource, ResourceContent, create_read_resource_result
-from .providers import ResourceProvider
+import logging
+import datetime
+from typing import List
+from mcp.server.fastmcp.resources import Resource
+from mcp.server.fastmcp.resources import (
+    TextResource,
+    FunctionResource,
+)
+from pydantic import AnyUrl
 
 logger = logging.getLogger(__name__)
 
 
-class ResourceRegistry:
-    def __init__(self):
-        self._providers: Dict[str, ResourceProvider] = {}
+def get_default_resources() -> List[Resource]:
+    resources = []
 
-    def register_provider(self, scheme: str, provider: ResourceProvider) -> None:
-        if scheme in self._providers:
-            if self._providers[scheme] is provider:
-                logger.debug(
-                    f"Provider for scheme '{scheme}' already registered with same instance"
-                )
-                return
-            logger.warning(
-                f"Provider for scheme '{scheme}' already registered, replacing"
-            )
+    try:
+        example_text = TextResource(
+            uri=AnyUrl("internal://example/welcome"),
+            name="Welcome Message",
+            description="A welcome message for the MCP server",
+            text="Welcome to the MCP Browser Automation Server!",
+        )
+        resources.append(example_text)
+    except Exception as e:
+        logger.warning(f"Could not create example text resource: {e}")
 
-        self._providers[scheme] = provider
-        logger.debug(f"Registered provider for scheme: {scheme}")
+    def get_server_info() -> str:
+        return (
+            f"Server status: Running\nTimestamp: {datetime.datetime.now().isoformat()}"
+        )
 
-    def get_provider(self, scheme: str) -> Optional[ResourceProvider]:
-        return self._providers.get(scheme)
+    try:
+        server_info = FunctionResource.from_function(
+            fn=get_server_info,
+            uri="internal://server/info",
+            name="Server Information",
+            description="Current server status and information",
+            mime_type="text/plain",
+        )
+        resources.append(server_info)
+    except Exception as e:
+        logger.warning(f"Could not create server info resource: {e}")
 
-    def get_providers(self) -> Dict[str, ResourceProvider]:
-        return self._providers.copy()
-
-    def unregister_provider(self, scheme: str) -> bool:
-        if scheme in self._providers:
-            del self._providers[scheme]
-            logger.debug(f"Unregistered provider for scheme: {scheme}")
-            return True
-        return False
-
-    def clear(self) -> None:
-        self._providers.clear()
-        logger.debug("Cleared all providers")
-
-    async def list_resources(self) -> List[Resource]:
-        all_resources = []
-
-        for scheme, provider in self._providers.items():
-            try:
-                resources = await provider.list_resources()
-                all_resources.extend(resources)
-                logger.debug(f"Got {len(resources)} resources from {scheme} provider")
-
-            except Exception as e:
-                logger.error(f"Error listing resources from {scheme} provider: {e}")
-                continue
-
-        logger.debug(f"Total resources across all providers: {len(all_resources)}")
-        return all_resources
-
-    async def read_resource(self, uri: str) -> Any:
-        try:
-            parsed = urlparse(uri)
-            scheme = parsed.scheme
-
-            if not scheme:
-                raise ValueError(f"Invalid URI (no scheme): {uri}")
-
-            provider = self.get_provider(scheme)
-            if not provider:
-                raise ValueError(f"No provider registered for scheme: {scheme}")
-
-            contents = await provider.read_resource(uri)
-
-            result = create_read_resource_result(contents)
-
-            logger.debug(f"Read resource {uri} with {len(contents)} content items")
-            return result
-
-        except Exception as e:
-            logger.error(f"Error reading resource {uri}: {e}")
-            raise
-
-    async def subscribe_to_resource(self, uri: str, callback) -> bool:
-        try:
-            parsed = urlparse(uri)
-            provider = self.get_provider(parsed.scheme)
-
-            if not provider:
-                raise ValueError(f"No provider for scheme: {parsed.scheme}")
-
-            return await provider.subscribe_to_resource(uri, callback)
-
-        except Exception as e:
-            logger.error(f"Error subscribing to resource {uri}: {e}")
-            return False
-
-    async def unsubscribe_from_resource(self, uri: str) -> bool:
-        try:
-            parsed = urlparse(uri)
-            provider = self.get_provider(parsed.scheme)
-
-            if not provider:
-                raise ValueError(f"No provider for scheme: {parsed.scheme}")
-
-            return await provider.unsubscribe_from_resource(uri)
-
-        except Exception as e:
-            logger.error(f"Error unsubscribing from resource {uri}: {e}")
-            return False
+    logger.info(f"Created {len(resources)} default FastMCP resources")
+    return resources
 
 
-resource_registry = ResourceRegistry()
+def get_resource_by_uri(uri: str) -> Resource | None:
+    resources = get_default_resources()
+    for resource in resources:
+        if str(resource.uri) == uri:
+            return resource
+    return None

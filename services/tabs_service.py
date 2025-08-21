@@ -1,8 +1,5 @@
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional
 from .base_service import BaseService
-
-if TYPE_CHECKING:
-    from context import ServerContext
 
 
 class TabsService(BaseService):

@@ -133,74 +133,6 @@ class VisionService(BaseService):
                 error=str(e),
             )
 
-    async def save_screenshot(
-        self,
-        filename: str,
-        full_page: bool = True,
-        quality: Optional[int] = 80,
-        format: str = "png",
-        element_selector: Optional[str] = None,
-        clip_region: Optional[Dict[str, int]] = None,
-        create_directories: bool = True,
-        overwrite: bool = True,
-    ) -> ServiceResult:
-        try:
-            screenshot_result = await self.take_screenshot(
-                full_page=full_page,
-                quality=quality,
-                format=format,
-                element_selector=element_selector,
-                clip_region=clip_region,
-            )
-
-            if not screenshot_result.success:
-                return screenshot_result
-
-            screenshot_data = screenshot_result.data["content"][0]["data"]
-
-            output_path = self.context.settings.output_dir / filename
-
-            if create_directories:
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-
-            if output_path.exists() and not overwrite:
-                return ServiceResult(
-                    success=False,
-                    message=f"File already exists and overwrite=False: {output_path}",
-                    error="File exists",
-                )
-
-            with open(output_path, "wb") as f:
-                f.write(screenshot_data)
-
-            if not output_path.exists() or output_path.stat().st_size == 0:
-                return ServiceResult(
-                    success=False,
-                    message=f"Failed to save screenshot: file not created or empty",
-                    error="File write failed",
-                )
-
-            return ServiceResult(
-                success=True,
-                message=f"Screenshot saved to {output_path} ({len(screenshot_data)} bytes)",
-                data={
-                    "filename": filename,
-                    "output_path": str(output_path),
-                    "full_page": full_page,
-                    "format": format,
-                    "size_bytes": len(screenshot_data),
-                    "file_exists": True,
-                },
-            )
-
-        except Exception as e:
-            logger.error(f"Save screenshot failed: {e}", exc_info=True)
-            return ServiceResult(
-                success=False,
-                message=f"Failed to save screenshot: {str(e)}",
-                error=str(e),
-            )
-
     async def screen_click(
         self,
         x: int,
@@ -294,7 +226,6 @@ class VisionService(BaseService):
         try:
             tab = self.context.current_tab_or_die()
 
-            # Validate coordinates
             if validate_bounds:
                 for coord_x, coord_y, name in [
                     (from_x, from_y, "start"),
@@ -476,12 +407,12 @@ class VisionService(BaseService):
                 success=True,
                 message="Page snapshot captured successfully",
                 data={
-                    "url": snapshot.url(),
+                    "url": snapshot.url,
                     "text": snapshot.text(),
-                    "has_screenshot": snapshot.has_screenshot(),
+                    "has_screenshot": snapshot.has_screenshot,
                     "include_screenshot": include_screenshot,
                     "element_count": len(snapshot.get_all_element_references()),
-                    "title": snapshot.title(),
+                    "title": snapshot.title,
                 },
             )
 

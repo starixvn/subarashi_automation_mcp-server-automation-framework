@@ -58,4 +58,4 @@ profile = "black"
 skip = "**"
 
 [tool.ruff]
-ignore = ["E", "W", "F", "C", "N", "D", "S", "T", "B", "A", "COM", "EM", "ICN", "G", "PIE", "PT", "RET", "SIM", "TID", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
+ignore = []

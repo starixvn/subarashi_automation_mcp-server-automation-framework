@@ -1,24 +1,49 @@
 from typing import Dict, Any, Optional, List
 from .base_service import BaseService, ServiceResult
 from services.vision_service import VisionService
+from core.snapshot import PageSnapshot
 
 
 class InteractionService(BaseService):
     def __init__(self, context):
         super().__init__(context)
 
-    async def click_element(self, element_ref: Dict[str, Any]) -> ServiceResult:
+    async def click_element(
+        self,
+        element_ref: Dict[str, Any],
+        modifiers: Optional[List[str]] = None,
+        click_type: str = "left",
+        click_count: int = 1,
+        button_delay: int = 0,
+    ) -> ServiceResult:
         try:
-            tab = self.context.current_tab_or_die()
-            snapshot = tab.snapshot_or_die()
+            tab = self.get_current_tab()
+            page = tab.page
+            snapshot = PageSnapshot(page)
+            await snapshot.snapshot_for_ai()
 
             locator = snapshot.ref_locator(element_ref)
-            await locator.click()
+
+            click_options = {}
+            if modifiers:
+                click_options["modifiers"] = modifiers
+            if click_type != "left":
+                click_options["button"] = click_type
+            if click_count != 1:
+                click_options["click_count"] = click_count
+            if button_delay > 0:
+                click_options["delay"] = button_delay
+
+            await locator.click(**click_options)
 
             return ServiceResult(
                 success=True,
-                message=f"Clicked {element_ref['element']}",
-                data={"element": element_ref["element"]},
+                message=f"Clicked {element_ref.get('element', element_ref.get('ref', 'element'))}",
+                data={
+                    "element": element_ref.get(
+                        "element", element_ref.get("ref", "element")
+                    )
+                },
             )
         except Exception as e:
             return ServiceResult(
@@ -33,12 +58,20 @@ class InteractionService(BaseService):
         text: str,
         slowly: bool = False,
         submit: bool = False,
+        clear_first: bool = True,
     ) -> ServiceResult:
         try:
-            tab = self.context.current_tab_or_die()
-            snapshot = tab.snapshot_or_die()
+            tab = self.get_current_tab()
+            page = tab.page
+
+            snapshot = PageSnapshot(page)
+
+            await snapshot.snapshot_for_ai()
 
             locator = snapshot.ref_locator(element_ref)
+
+            if clear_first:
+                await locator.clear()
 
             if slowly:
                 await locator.press_sequentially(text)
@@ -70,8 +103,12 @@ class InteractionService(BaseService):
 
     async def hover_element(self, element_ref: Dict[str, Any]) -> ServiceResult:
         try:
-            tab = self.context.current_tab_or_die()
-            snapshot = tab.snapshot_or_die()
+            tab = self.get_current_tab()
+            page = tab.page
+
+            snapshot = PageSnapshot(page)
+
+            await snapshot.snapshot_for_ai()
 
             locator = snapshot.ref_locator(element_ref)
             await locator.hover()
@@ -89,19 +126,20 @@ class InteractionService(BaseService):
             )
 
     async def select_option(
-        self, element_ref: Dict[str, Any], values: List[str]
+        self, element_ref: Dict[str, Any], option: str
     ) -> ServiceResult:
         try:
-            tab = self.context.current_tab_or_die()
-            snapshot = tab.snapshot_or_die()
-
+            tab = self.get_current_tab()
+            page = tab.page
+            snapshot = PageSnapshot(page)
+            await snapshot.snapshot_for_ai()
             locator = snapshot.ref_locator(element_ref)
-            await locator.select_option(values)
+            await locator.select_option(option)
 
             return ServiceResult(
                 success=True,
-                message=f"Selected {values} in {element_ref['element']}",
-                data={"element": element_ref["element"], "values": values},
+                message=f"Selected {option} in {element_ref['element']}",
+                data={"element": element_ref["element"], "option": option},
             )
         except Exception as e:
             return ServiceResult(
@@ -110,35 +148,27 @@ class InteractionService(BaseService):
                 error=str(e),
             )
 
-    async def get_text_content(self, selector: str) -> ServiceResult:
+    async def get_text_content(self, element_ref: Dict[str, Any]) -> ServiceResult:
         try:
             tab = self.context.current_tab_or_die()
-            text = await tab.page.evaluate(
-                """
-                (selector) => {
-                    const element = document.querySelector(selector);
-                    if (!element) return null;
-                    
-                    let text = element.innerText || '';
-                    
-                    text = text.replace(/[ \\t]+/g, ' ');
-                    text = text.replace(/\\n\\s*\\n\\s*\\n/g, '\\n\\n');
-                    
-                    return text.trim();
-                }
-                """,
-                selector,
-            )
+            snapshot = tab.snapshot_or_die()
+
+            locator = snapshot.ref_locator(element_ref)
+            text = await locator.inner_text()
+
+            if text:
+                text = text.replace("\t", " ")
+                text = " ".join(text.split())
 
             return ServiceResult(
                 success=True,
-                message=f"Retrieved text content from {selector}",
-                data={"selector": selector, "text": text or "(empty)"},
+                message=f"Retrieved text content from {element_ref['element']}",
+                data={"element": element_ref["element"], "text": text or "(empty)"},
             )
         except Exception as e:
             return ServiceResult(
                 success=False,
-                message=f"Failed to get text from {selector}: {str(e)}",
+                message=f"Failed to get text from {element_ref['element']}: {str(e)}",
                 error=str(e),
             )
 

@@ -1,7 +1,9 @@
 import asyncio
 import os
 import logging
+import threading
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
+import weakref
 
 from config.settings import Settings
 from core.modal_state import (
@@ -15,20 +17,17 @@ from core.browser_context_factory import (
     create_browser_context_factory,
     get_browser_context_manager,
     BrowserContextResult,
-    BrowserContextManager,
 )
 from core.tab import Tab
-from core.registry import EnhancedToolRegistry
-from core.tool_schema import ToolCapability
-from prompts.registry import PromptRegistry
-from resources.registry import ResourceRegistry
+from core.registry import create_browser_registry
+from prompts.registry import get_default_prompts
 from resources.providers import (
-    FileSystemResourceProvider,
-    BrowserResourceProvider,
-    DatabaseResourceProvider,
+    create_filesystem_resources,
+    create_browser_resources,
+    create_database_resources,
 )
 from tools.utils import ManualPromise
-
+from mcp.server.lowlevel.server import request_ctx
 
 if TYPE_CHECKING:
     from playwright.async_api import Dialog, FileChooser, Download, Page
@@ -36,108 +35,36 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ServerContext:
-    def __init__(
-        self,
-        settings: Settings,
-        capabilities: Optional[List[str]] = None,
-        **factory_kwargs,
-    ):
-        self.settings: Settings = settings
-        self._browser_context_manager = get_browser_context_manager(settings)
-        self._browser_context_factory = create_browser_context_factory(
-            settings, **factory_kwargs
-        )
+class SessionBrowserContext:
+    def __init__(self, session_id: str, server_context: "ServerContext"):
+        self.session_id = session_id
+        self.server_context = server_context
         self._browser_context_promise: Optional[asyncio.Task[BrowserContextResult]] = (
             None
         )
-
         self._tabs: List[Tab] = []
         self._current_tab: Optional[Tab] = None
         self._modal_states: List[ModalStateWithTab] = []
-        self._download_tracker = DownloadTracker(settings.output_dir)
-        self.clientVersion: Optional[Dict[str, str]] = None
-        self._pending_action: Optional[Dict[str, Any]] = None
-        self.capabilities = capabilities or []
+        self._download_tracker = DownloadTracker(server_context.settings.output_dir)
 
-        tool_capabilities = None
-        if capabilities:
-            tool_capabilities = []
-            for cap in capabilities:
-                try:
-                    tool_capabilities.append(ToolCapability(cap))
-                except ValueError:
-                    logger.warning(f"Unknown capability: {cap}")
-
-        self.tool_registry: EnhancedToolRegistry = EnhancedToolRegistry(
-            self, tool_capabilities
-        )
-
-        self.prompt_registry = PromptRegistry()
-        self.resource_registry = ResourceRegistry()
-        self._setup_resource_providers()
-
-    def _setup_resource_providers(self):
-        fs_provider = FileSystemResourceProvider(
-            root_paths=[os.getcwd()],
-            allowed_extensions=[
-                ".txt",
-                ".md",
-                ".json",
-                ".yaml",
-                ".yml",
-                ".xml",
-                ".csv",
-                ".log",
-                ".py",
-                ".js",
-                ".ts",
-                ".html",
-                ".css",
-                ".sql",
-                ".toml",
-                ".ini",
-                ".cfg",
-                ".conf",
-                ".docx",
-                ".pdf",
-            ],
-        )
-        self.resource_registry.register_provider("file", fs_provider)
-
-        browser_provider = BrowserResourceProvider(self)
-        self.resource_registry.register_provider("browser", browser_provider)
-
-        db_provider = DatabaseResourceProvider()
-        self.resource_registry.register_provider("db", db_provider)
-
-        logger.info("Resource providers initialized")
-
-    async def start(self):
-        await self._ensure_browser_context()
-
-    def _ensure_browser_context(self) -> asyncio.Task[BrowserContextResult]:
+    async def ensure_browser_context(self) -> BrowserContextResult:
         if self._browser_context_promise is None:
-            logger.debug("Creating new browser context promise")
+            logger.info(f"Initializing browser context for session: {self.session_id}")
             self._browser_context_promise = asyncio.create_task(
                 self._setup_browser_context()
             )
-        return self._browser_context_promise
+        return await self._browser_context_promise
 
     async def _setup_browser_context(self) -> BrowserContextResult:
-        logger.debug("Setting up browser context")
-
-        context_result = await self._browser_context_factory.create_context()
+        context_result = (
+            await self.server_context._browser_context_factory.create_context()
+        )
         browser_context = context_result.browser_context
 
         for page in browser_context.pages:
             self._on_page_created(page)
 
         browser_context.on("page", self._on_page_created)
-
-        logger.info(
-            f"Browser context created with factory: {self._browser_context_factory.name}"
-        )
         return context_result
 
     def _on_page_created(self, page: "Page"):
@@ -156,8 +83,6 @@ class ServerContext:
         if self._current_tab is None:
             self._current_tab = tab
 
-        logger.debug(f"New tab created, total tabs: {len(self._tabs)}")
-
     def _on_page_closed(self, tab: Tab):
         if tab in self._tabs:
             self._tabs.remove(tab)
@@ -166,8 +91,6 @@ class ServerContext:
 
         if self._current_tab == tab:
             self._current_tab = self._tabs[0] if self._tabs else None
-
-        logger.debug(f"Tab closed, remaining tabs: {len(self._tabs)}")
 
     def tabs(self) -> List[Tab]:
         return self._tabs.copy()
@@ -180,7 +103,7 @@ class ServerContext:
         return self._current_tab
 
     async def new_tab(self) -> Tab:
-        context_result = await self._ensure_browser_context()
+        context_result = await self.ensure_browser_context()
         browser_context = context_result.browser_context
 
         page = await browser_context.new_page()
@@ -200,7 +123,7 @@ class ServerContext:
             raise Exception(f"Tab index {index} out of range")
 
     async def ensure_tab(self) -> Tab:
-        context_result = await self._ensure_browser_context()
+        context_result = await self.ensure_browser_context()
         browser_context = context_result.browser_context
 
         if not self._current_tab:
@@ -254,13 +177,17 @@ class ServerContext:
     def set_modal_state(self, modal_state: ModalState, in_tab: Tab):
         state_with_tab = ModalStateWithTab(modal_state, in_tab)
         self._modal_states.append(state_with_tab)
-        logger.debug(f"Modal state added: {modal_state.type} in tab {id(in_tab)}")
+        logger.debug(
+            f"Modal state added in session {self.session_id}: {modal_state.type} in tab {id(in_tab)}"
+        )
 
     def clear_modal_state(self, modal_state: ModalState):
         self._modal_states = [
             state for state in self._modal_states if state.modal_state != modal_state
         ]
-        logger.debug(f"Modal state cleared: {modal_state.type}")
+        logger.debug(
+            f"Modal state cleared in session {self.session_id}: {modal_state.type}"
+        )
 
     def modal_states_markdown(self) -> List[str]:
         result = ["### Modal state"]
@@ -270,18 +197,7 @@ class ServerContext:
         else:
             for state_with_tab in self._modal_states:
                 state = state_with_tab.modal_state
-                tool = None
-                for tool_instance in self.tool_registry.get_all_tools():
-                    if tool_instance.clears_modal_state == state.type.value:
-                        tool = tool_instance
-                        break
-
-                if tool:
-                    result.append(
-                        f'- [{state.description}]: can be handled by the "{tool.schema.name}" tool'
-                    )
-                else:
-                    result.append(f"- [{state.description}]: no handler found")
+                result.append(f"- [{state.description}]: modal state present")
 
         return result
 
@@ -291,28 +207,223 @@ class ServerContext:
             description=f'"{dialog.type}" dialog with message "{dialog.message}"',
         )
         self.set_modal_state(modal_state, tab)
-
-        if self._pending_action and "dialog_shown" in self._pending_action:
-            self._pending_action["dialog_shown"].resolve()
-
-        logger.info(f"Dialog shown in tab: {dialog.message}")
+        logger.info(f"Dialog shown in session {self.session_id}: {dialog.message}")
 
     def _on_file_chooser_shown(self, tab: Tab, file_chooser: "FileChooser"):
         modal_state = FileChooserModalState(
             file_chooser=file_chooser, description="File chooser dialog"
         )
         self.set_modal_state(modal_state, tab)
-        logger.info("File chooser shown in tab")
+        logger.info(f"File chooser shown in session {self.session_id}")
 
     async def _on_download_started(self, tab: Tab, download: "Download"):
         await self._download_tracker.track_download(download, tab)
-        logger.info(f"Download started: {download.suggested_filename}")
+        logger.info(
+            f"Download started in session {self.session_id}: {download.suggested_filename}"
+        )
 
     def get_downloads(self) -> List[DownloadEntry]:
         return self._download_tracker.get_downloads()
 
     def get_downloads_markdown(self) -> List[str]:
         return self._download_tracker.get_downloads_markdown()
+
+    async def cleanup(self):
+        for tab in self._tabs.copy():
+            try:
+                await tab.close()
+            except Exception as e:
+                logger.error(f"Error closing tab in session {self.session_id}: {e}")
+
+        await self._download_tracker.cleanup()
+
+        if self._browser_context_promise:
+            try:
+                context_result = await self._browser_context_promise
+                await context_result.close()
+            except Exception as e:
+                logger.error(
+                    f"Error closing browser context in session {self.session_id}: {e}"
+                )
+
+        self._tabs.clear()
+        self._current_tab = None
+        self._modal_states.clear()
+        self._browser_context_promise = None
+
+
+class ServerContext:
+    def __init__(
+        self,
+        settings: Settings,
+        capabilities: Optional[List[str]] = None,
+        **factory_kwargs,
+    ):
+        self.settings: Settings = settings
+        self._browser_context_manager = get_browser_context_manager(settings)
+        self._browser_context_factory = create_browser_context_factory(
+            settings, **factory_kwargs
+        )
+
+        self._session_contexts: Dict[str, SessionBrowserContext] = {}
+        self._session_refs: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+        self._current_session_id = threading.local()
+
+        self.clientVersion: Optional[Dict[str, str]] = None
+        self._pending_action: Optional[Dict[str, Any]] = None
+        self.capabilities = capabilities or []
+        self.browser_registry = create_browser_registry(self._browser_context_manager)
+        self.prompts = get_default_prompts()
+        self.resources = self._setup_resources()
+
+        logger.info("ServerContext initialized with session-based browser contexts")
+
+    def set_current_session_id(self, session_id: str):
+        self._current_session_id.value = session_id
+
+    def get_current_session_id(self) -> Optional[str]:
+        return getattr(self._current_session_id, "value", None)
+
+    def _setup_resources(self):
+        resources = []
+
+        try:
+            fs_resources = create_filesystem_resources(
+                root_paths=[os.getcwd()],
+                allowed_extensions=[
+                    ".txt",
+                    ".md",
+                    ".json",
+                    ".yaml",
+                    ".yml",
+                    ".xml",
+                    ".csv",
+                    ".log",
+                    ".py",
+                    ".js",
+                    ".ts",
+                    ".html",
+                    ".css",
+                    ".sql",
+                    ".toml",
+                    ".ini",
+                    ".cfg",
+                    ".conf",
+                    ".docx",
+                    ".pdf",
+                ],
+            )
+            resources.extend(fs_resources)
+        except Exception as e:
+            logger.warning(f"Could not create filesystem resources: {e}")
+        try:
+            browser_resources = create_browser_resources(self)
+            resources.extend(browser_resources)
+        except Exception as e:
+            logger.warning(f"Could not create browser resources: {e}")
+
+        try:
+            db_resources = create_database_resources({})
+            resources.extend(db_resources)
+        except Exception as e:
+            logger.warning(f"Could not create database resources: {e}")
+
+        return resources
+
+    async def start(self):
+        logger.info(
+            "Server context started - browsers will be initialized per-session when needed"
+        )
+
+    def get_session_id(self) -> str:
+        try:
+            context = request_ctx.get()
+            if context and context.request:
+                request_data = context.request
+
+                if hasattr(request_data, "query_params"):
+                    session_id = request_data.query_params.get("session_id")
+                    if session_id:
+                        return session_id
+
+                if hasattr(request_data, "headers"):
+                    session_id = request_data.headers.get("mcp-session-id")
+                    if session_id:
+                        return session_id
+
+            if context and context.session:
+                session_id = str(id(context.session))
+                return f"session_{session_id}"
+
+        except (LookupError, AttributeError):
+            pass
+
+        return "default_session"
+
+    def get_session_browser_context(
+        self, session_id: Optional[str] = None
+    ) -> SessionBrowserContext:
+        if session_id is None:
+            session_id = self.get_session_id()
+
+        if session_id not in self._session_contexts:
+            logger.info(f"Creating new browser session context: {session_id}")
+            self._session_contexts[session_id] = SessionBrowserContext(session_id, self)
+
+        return self._session_contexts[session_id]
+
+    def tabs(self) -> List[Tab]:
+        session_context = self.get_session_browser_context()
+        return session_context.tabs()
+
+    def current_tab_or_die(self) -> Tab:
+        session_context = self.get_session_browser_context()
+        return session_context.current_tab_or_die()
+
+    async def new_tab(self) -> Tab:
+        session_context = self.get_session_browser_context()
+        return await session_context.new_tab()
+
+    async def select_tab(self, index: int):
+        session_context = self.get_session_browser_context()
+        await session_context.select_tab(index)
+
+    async def ensure_tab(self) -> Tab:
+        session_context = self.get_session_browser_context()
+        return await session_context.ensure_tab()
+
+    async def list_tabs_markdown(self) -> str:
+        session_context = self.get_session_browser_context()
+        return await session_context.list_tabs_markdown()
+
+    async def close_tab(self, index: Optional[int] = None) -> str:
+        session_context = self.get_session_browser_context()
+        return await session_context.close_tab(index)
+
+    def modal_states(self) -> List[ModalState]:
+        session_context = self.get_session_browser_context()
+        return session_context.modal_states()
+
+    def set_modal_state(self, modal_state: ModalState, in_tab: Tab):
+        session_context = self.get_session_browser_context()
+        session_context.set_modal_state(modal_state, in_tab)
+
+    def clear_modal_state(self, modal_state: ModalState):
+        session_context = self.get_session_browser_context()
+        session_context.clear_modal_state(modal_state)
+
+    def modal_states_markdown(self) -> List[str]:
+        session_context = self.get_session_browser_context()
+        return session_context.modal_states_markdown()
+
+    def get_downloads(self) -> List[DownloadEntry]:
+        session_context = self.get_session_browser_context()
+        return session_context.get_downloads()
+
+    def get_downloads_markdown(self) -> List[str]:
+        session_context = self.get_session_browser_context()
+        return session_context.get_downloads_markdown()
 
     def client_supports_images(self) -> bool:
         if hasattr(self.settings, "image_responses"):
@@ -390,107 +501,22 @@ class ServerContext:
         return self._browser_context_manager.get_factory(factory_type, **kwargs)
 
     async def close(self):
-        logger.info("Closing server context")
-
-        for tab in self._tabs.copy():
+        for session_id, session_context in list(self._session_contexts.items()):
             try:
-                await tab.close()
+                await session_context.cleanup()
             except Exception as e:
-                logger.error(f"Error closing tab: {e}")
+                logger.error(f"Error cleaning up session {session_id}: {e}")
 
-        await self._download_tracker.cleanup()
+        self._session_contexts.clear()
 
         try:
-            for scheme, provider in self.resource_registry.get_providers().items():
-                if hasattr(provider, "_file_watchers"):
-                    for watcher in provider._file_watchers.values():
-                        watcher.cancel()
-                    provider._file_watchers.clear()
-                    provider._subscribers.clear()
+            logger.debug("Cleaning up FastMCP resources")
         except Exception as e:
-            logger.error(f"Error cleaning up resource providers: {e}")
-
-        if self._browser_context_promise:
-            try:
-                context_result = await self._browser_context_promise
-                await context_result.close()
-            except Exception as e:
-                logger.error(f"Error closing browser context: {e}")
+            logger.error(f"Error cleaning up resources: {e}")
 
         try:
             await self._browser_context_manager.cleanup()
         except Exception as e:
             logger.error(f"Error cleaning up context manager: {e}")
 
-        self._tabs.clear()
-        self._current_tab = None
-        self._modal_states.clear()
-        self._browser_context_promise = None
-
         logger.info("Server context closed")
-
-    def __str__(self) -> str:
-        return f"ServerContext(browser={self.settings.browser_type}, tabs={len(self._tabs)})"
-
-    async def get_iframe_contexts(self) -> List[Dict[str, Any]]:
-        """Get all iframe contexts in current page"""
-        try:
-            current_tab = self.current_tab_or_die()
-
-            iframe_info = await current_tab.page.evaluate("""
-                () => {
-                    const iframes = document.querySelectorAll('iframe');
-                    return Array.from(iframes).map((iframe, index) => {
-                        const rect = iframe.getBoundingClientRect();
-                        return {
-                            index: index,
-                            id: iframe.id || null,
-                            name: iframe.name || null,
-                            src: iframe.src || null,
-                            selector: iframe.id ? `#${iframe.id}` : 
-                                     iframe.name ? `[name="${iframe.name}"]` :
-                                     `iframe:nth-of-type(${index + 1})`,
-                            x: Math.round(rect.left),
-                            y: Math.round(rect.top),
-                            width: Math.round(rect.width),
-                            height: Math.round(rect.height),
-                            visible: rect.width > 0 && rect.height > 0
-                        };
-                    });
-                }
-            """)
-
-            return iframe_info
-        except Exception as e:
-            logger.error(f"Error getting iframe contexts: {e}")
-            return []
-
-    async def switch_to_iframe(self, iframe_selector: str):
-        """Switch focus to specific iframe"""
-        try:
-            current_tab = self.current_tab_or_die()
-
-            iframe_locator = current_tab.page.locator(iframe_selector)
-            frame = iframe_locator.content_frame()
-
-            return frame
-        except Exception as e:
-            logger.error(f"Error switching to iframe {iframe_selector}: {e}")
-            return None
-
-    async def get_iframe_url(self, iframe_selector: str) -> Optional[str]:
-        """Get URL of specific iframe"""
-        try:
-            current_tab = self.current_tab_or_die()
-
-            iframe_src = await current_tab.page.evaluate(f"""
-                () => {{
-                    const iframe = document.querySelector('{iframe_selector}');
-                    return iframe ? iframe.src : null;
-                }}
-            """)
-
-            return iframe_src
-        except Exception as e:
-            logger.error(f"Error getting iframe URL: {e}")
-            return None

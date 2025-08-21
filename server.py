@@ -1,403 +1,55 @@
-import asyncio
 import logging
-import signal
-import sys
-import traceback
-import uuid
-import uvicorn
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
-import anyio
-from mcp.server import Server
-from mcp.server.models import InitializationOptions
-from mcp.types import (
-    ServerCapabilities,
-    EmptyResult,
-    TextContent,
-    ImageContent,
-    EmbeddedResource,
-    Tool as MCPTool,
-    Prompt as MCPPrompt,
-    Resource as MCPResource,
-)
-from starlette.applications import Starlette
-from starlette.routing import Route, Mount, WebSocketRoute
-from starlette.responses import JSONResponse, Response
-from starlette.middleware.cors import CORSMiddleware
-from mcp.server.sse import SseServerTransport
-from mcp.server.websocket import websocket_server
-from mcp.server.stdio import stdio_server
-from mcp.server.streamable_http import StreamableHTTPServerTransport
-
-from config.settings import Settings
+from mcp.server.fastmcp import FastMCP
 from context import ServerContext
+from tools import register_all_tools
 
 logger = logging.getLogger(__name__)
 
 
-def create_server(
-    settings: Settings, capabilities: Optional[List[str]], context: ServerContext
-) -> Server:
-    server = Server("mcp-automation-server")
+def create_fastmcp_app(
+    port: Optional[int] = None,
+    host: Optional[str] = None,
+    capabilities: Optional[List[str]] = None,
+    context: Optional[ServerContext] = None,
+) -> FastMCP:
+    logger.info("Creating FastMCP app")
 
-    @server.list_tools()
-    async def list_tools():
-        tool_schemas = await context.tool_registry.list_tools()
-        mcp_tools = []
-        for schema in tool_schemas:
-            mcp_tool = MCPTool(
-                name=schema["name"],
-                description=schema.get("description", ""),
-                inputSchema=schema.get("inputSchema", {}),
-            )
-            mcp_tools.append(mcp_tool)
-        return mcp_tools
+    app = FastMCP("MCP Server Automation Framework")
+    if port is not None:
+        app.settings.port = port
+    if host is not None:
+        app.settings.host = host
 
-    @server.call_tool()
-    async def call_tool(name: str, arguments: Dict[str, Any]):
-        try:
-            tool_schemas = await context.tool_registry.list_tools()
-            tool_info = next(
-                (tool for tool in tool_schemas if tool["name"] == name),
-                None,
-            )
+    register_all_tools(app, context, capabilities)
+    app._context = context
+    if context:
+        _register_prompts_and_resources(app, context)
 
-            if not tool_info:
-                return [TextContent(type="text", text=f'Tool "{name}" not found')]
-
-            modal_states = [state.type.value for state in context.modal_states()]
-
-            tool_clears_modal = tool_info.get("clearsModalState")
-            if tool_clears_modal and tool_clears_modal not in modal_states:
-                error_messages = [
-                    f'The tool "{name}" can only be used when there is related modal state present.'
-                ]
-                error_messages.extend(context.modal_states_markdown())
-                return [TextContent(type="text", text="\n".join(error_messages))]
-
-            if not tool_clears_modal and modal_states:
-                error_messages = [f'Tool "{name}" does not handle the modal state.']
-                error_messages.extend(context.modal_states_markdown())
-                return [TextContent(type="text", text="\n".join(error_messages))]
-
-            result = await context.tool_registry.execute_tool(name, arguments)
-
-            content = []
-            if result and hasattr(result, "content") and result.content:
-                for item in result.content:
-                    if item.get("type") == "text":
-                        content.append(TextContent(type="text", text=item["text"]))
-                    elif item.get("type") == "image":
-                        content.append(
-                            ImageContent(
-                                type="image",
-                                data=item["data"],
-                                mimeType=item["mimeType"],
-                            )
-                        )
-
-            if not content:
-                content = [TextContent(type="text", text="Tool executed successfully")]
-
-            return content
-
-        except Exception as e:
-            logger.error(f"Error executing tool {name}: {e}")
-            return [
-                TextContent(type="text", text=f"Error executing tool {name}: {str(e)}")
-            ]
-
-    @server.list_prompts()
-    async def list_prompts():
-        prompts = context.prompt_registry.list_prompts()
-        return [prompt.to_mcp_prompt() for prompt in prompts]
-
-    @server.get_prompt()
-    async def get_prompt(name: str, arguments: Optional[Dict[str, str]] = None):
-        prompt = context.prompt_registry.get_prompt(name)
-        if not prompt:
-            raise ValueError(f"Prompt '{name}' not found")
-        return await prompt.render(arguments)
-
-    @server.list_resources()
-    async def list_resources():
-        resources = await context.resource_registry.list_resources()
-        return [resource.to_mcp_resource() for resource in resources]
-
-    @server.read_resource()
-    async def read_resource(uri: str):
-        return await context.resource_registry.read_resource(uri)
-
-    return server
+    return app
 
 
-class MCPServer:
-    def __init__(
-        self,
-        settings: Optional[Settings] = None,
-        capabilities: Optional[List[str]] = None,
-    ):
-        self.settings = settings or Settings()
-        self.capabilities = capabilities
-        self._cached_context: Optional[ServerContext] = None
-        self._context_lock = asyncio.Lock()
-
-    def create_initialization_options(self) -> InitializationOptions:
-        return InitializationOptions(
-            server_name="mcp-automation-server",
-            server_version="1.0.0",
-            capabilities=ServerCapabilities(
-                tools={"listChanged": True},
-                prompts={"listChanged": True},
-                resources={"subscribe": True, "listChanged": True},
-                logging={},
-            ),
-        )
-
-    async def get_or_create_context(self) -> ServerContext:
-        if self._cached_context is None:
-            async with self._context_lock:
-                if self._cached_context is None:
-                    logger.info("Creating cached ServerContext (first time)")
-                    self._cached_context = ServerContext(
-                        self.settings, capabilities=self.capabilities
-                    )
-                    await self._cached_context.start()
-                    logger.info("Cached ServerContext ready")
-        return self._cached_context
-
-    async def cleanup_context(self):
-        if self._cached_context:
-            logger.info("Cleaning up cached ServerContext")
-            await self._cached_context.close()
-            self._cached_context = None
-
-    def setup_exit_watchdog(self):
-        def handle_exit():
-            logger.info("Server shutting down...")
-
-            if self._cached_context:
-                try:
-                    asyncio.run(self.cleanup_context())
-                except:
-                    pass
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, lambda s, f: handle_exit())
-        signal.signal(signal.SIGTERM, lambda s, f: handle_exit())
-
-    async def run_stdio(self):
-        session_id = "stdio_session"
-        logger.info(f"Starting STDIO MCP server for session: {session_id}")
-
-        async with stdio_server() as (read_stream, write_stream):
-            context = await self.get_or_create_context()
-            server = create_server(self.settings, self.capabilities, context)
-
+def _register_prompts_and_resources(app: FastMCP, context: ServerContext):
+    logger.info("Registering prompts and resources with FastMCP server")
+    if hasattr(context, "prompts") and context.prompts:
+        for prompt in context.prompts:
             try:
-                await server.run(
-                    read_stream, write_stream, self.create_initialization_options()
-                )
-            finally:
-                pass
+                app.add_prompt(prompt)
+                logger.debug(f"Registered prompt: {prompt.name}")
+            except Exception as e:
+                logger.error(f"Failed to register prompt {prompt.name}: {e}")
+        logger.info(f"Registered {len(context.prompts)} prompts")
+    else:
+        logger.warning("No prompts found in context to register")
 
-    async def run_websocket(self, host: str = "localhost", port: int = 8765):
-        async def websocket_endpoint(websocket):
-            query_params = (
-                dict(websocket.query_params)
-                if hasattr(websocket, "query_params")
-                else {}
-            )
-            session_id = query_params.get("session_id", f"ws_session_{id(websocket)}")
-            logger.info(f"New WebSocket connection for session: {session_id}")
-
-            await websocket.accept()
+    if hasattr(context, "resources") and context.resources:
+        for resource in context.resources:
             try:
-                async with websocket_server(
-                    websocket.scope, websocket.receive, websocket.send
-                ) as (read_stream, write_stream):
-                    context = await self.get_or_create_context()
-                    server = create_server(self.settings, self.capabilities, context)
-
-                    try:
-                        await server.run(
-                            read_stream,
-                            write_stream,
-                            self.create_initialization_options(),
-                        )
-                    finally:
-                        pass
-            finally:
-                logger.info(f"WebSocket connection closed for session: {session_id}")
-
-        app = Starlette(routes=[WebSocketRoute("/", websocket_endpoint)])
-
-        config = uvicorn.Config(app, host=host, port=port, log_level="info")
-        server = uvicorn.Server(config)
-        await server.serve()
-
-    async def run_sse(self, host: str = "localhost", port: int = 8080):
-        logging.getLogger("mcp").setLevel(logging.INFO)
-        logging.getLogger("mcp.server").setLevel(logging.INFO)
-        logging.getLogger("mcp.server.session").setLevel(logging.INFO)
-
-        sse_transport = SseServerTransport("/messages")
-
-        async def handle_sse(request):
-            logger.info("New SSE connection established")
-
-            try:
-                async with sse_transport.connect_sse(
-                    request.scope, request.receive, request._send
-                ) as (read_stream, write_stream):
-                    logger.info("Using cached MCP server instance")
-
-                    context = await self.get_or_create_context()
-                    server = create_server(self.settings, self.capabilities, context)
-
-                    try:
-                        await server.run(
-                            read_stream,
-                            write_stream,
-                            self.create_initialization_options(),
-                        )
-                    finally:
-                        logger.info("SSE connection closed, keeping cached context")
-
-            except (Exception, asyncio.CancelledError) as e:
-                if isinstance(e, asyncio.CancelledError):
-                    logger.info("SSE connection cancelled by client")
-                else:
-                    logger.error(f"Error in SSE connection: {e}")
-                    traceback.print_exc()
-            return Response()
-
-        class MessagesApp:
-            async def __call__(self, scope, receive, send):
-                if scope["type"] == "http" and scope["method"] == "POST":
-                    try:
-                        await sse_transport.handle_post_message(scope, receive, send)
-                    except Exception as e:
-                        logger.error(f"Error in SSE connection: {e}")
-                        response = Response(status_code=500)
-                        await response(scope, receive, send)
-                else:
-                    response = Response(status_code=405)
-                    await response(scope, receive, send)
-
-        async def health_endpoint(request):
-            return JSONResponse(
-                {
-                    "status": "ok",
-                    "service": "mcp-automation-server",
-                    "version": "1.0.0",
-                    "transport": "sse",
-                }
-            )
-
-        async def root_endpoint(request):
-            return JSONResponse(
-                {
-                    "service": "mcp-automation-server",
-                    "version": "1.0.0",
-                    "transport": "sse",
-                    "capabilities": self.capabilities or [],
-                }
-            )
-
-        app = Starlette(
-            routes=[
-                Route("/", endpoint=root_endpoint, methods=["GET"]),
-                Route("/sse", endpoint=handle_sse, methods=["GET"]),
-                Mount("/messages", app=MessagesApp()),
-                Route("/health", endpoint=health_endpoint, methods=["GET"]),
-            ]
-        )
-
-        app_with_cors = CORSMiddleware(
-            app,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-        logger.info(f"Starting SSE server on {host}:{port}")
-        config = uvicorn.Config(app_with_cors, host=host, port=port, log_level="info")
-        server = uvicorn.Server(config)
-        await server.serve()
-
-    async def run_http(self, host: str = "localhost", port: int = 8080):
-        session_transports: Dict[str, StreamableHTTPServerTransport] = {}
-
-        async def mcp_endpoint(request):
-            session_id = request.headers.get("mcp-session-id")
-
-            if not session_id:
-                session_id = str(uuid.uuid4())
-                logger.info(f"Creating new HTTP session: {session_id}")
-
-                transport = StreamableHTTPServerTransport(
-                    mcp_session_id=session_id, is_json_response_enabled=True
-                )
-                session_transports[session_id] = transport
-
-                context = await self.get_or_create_context()
-                server = create_server(self.settings, self.capabilities, context)
-
-                async def run_session_server():
-                    async with transport.connect() as (read_stream, write_stream):
-                        try:
-                            await server.run(
-                                read_stream,
-                                write_stream,
-                                self.create_initialization_options(),
-                            )
-                        finally:
-                            pass
-
-                asyncio.create_task(run_session_server())
-            else:
-                if session_id not in session_transports:
-                    from starlette.responses import Response
-
-                    return Response(status_code=404, content="Session not found")
-
-                transport = session_transports[session_id]
-
-            await transport.handle_request(
-                request.scope, request.receive, request._send
-            )
-
-        async def health_endpoint(request):
-            return JSONResponse(
-                {
-                    "status": "ok",
-                    "service": "mcp-automation-server",
-                    "version": "1.0.0",
-                    "transport": "http",
-                }
-            )
-
-        async def root_endpoint(request):
-            return JSONResponse(
-                {
-                    "service": "mcp-automation-server",
-                    "version": "1.0.0",
-                    "transport": "http",
-                    "capabilities": self.capabilities or [],
-                }
-            )
-
-        app = Starlette(
-            routes=[
-                Route("/", endpoint=root_endpoint, methods=["GET"]),
-                Route("/mcp", mcp_endpoint, methods=["GET", "POST", "DELETE"]),
-                Route("/health", health_endpoint, methods=["GET"]),
-            ]
-        )
-
-        logger.info(f"Starting HTTP server on {host}:{port}")
-        config = uvicorn.Config(app, host=host, port=port, log_level="info")
-        server = uvicorn.Server(config)
-        await server.serve()
+                app.add_resource(resource)
+                logger.debug(f"Registered resource: {resource.uri}")
+            except Exception as e:
+                logger.error(f"Failed to register resource {resource.uri}: {e}")
+        logger.info(f"Registered {len(context.resources)} resources")
+    else:
+        logger.warning("No resources found in context to register")

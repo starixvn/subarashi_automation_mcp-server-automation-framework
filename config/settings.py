@@ -1,23 +1,36 @@
 import json
 import os
-import tempfile
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Union, Literal
+from typing import Dict, List, Optional, Any, Literal
 from datetime import datetime
 
 
+@dataclass
 class Settings:
+    browser_type: str = "chromium"
+    headless: bool = True
+    enable_vision: bool = False
+    output_dir: Optional[str] = None
+    user_data_dir: Optional[str] = None
+    cdp_endpoint: Optional[str] = None
+    isolated: bool = False
+    storage_state: Optional[str] = None
+    port: Optional[int] = None
+    host: Optional[str] = None
+
     def __init__(
         self,
         browser_type: str = "chromium",
-        headless: bool = False,
+        headless: bool = True,
         enable_vision: bool = False,
         output_dir: Optional[str] = None,
         user_data_dir: Optional[str] = None,
         cdp_endpoint: Optional[str] = None,
         isolated: bool = False,
         storage_state: Optional[str] = None,
+        port: Optional[int] = None,
+        host: Optional[str] = None,
     ):
         self.browser_type = browser_type
         self.headless = headless
@@ -478,6 +491,8 @@ def config_to_settings(config: FullConfig) -> Settings:
         cdp_endpoint=config.browser.cdp_endpoint,
         isolated=config.browser.isolated,
         storage_state=config.browser.context_options.storage_state,
+        port=config.server.port,
+        host=config.server.host,
     )
 
 

@@ -1,710 +1,689 @@
-import base64
-import json
 import logging
-from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
-from dataclasses import dataclass
+import traceback
+import asyncio
+import re
 from datetime import datetime
-from pathlib import Path
-
-if TYPE_CHECKING:
-    from playwright.async_api import Page, Locator
+from typing import Dict, Optional, List
+from playwright.async_api import Page, Frame, Locator
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class ElementReference:
-    ref: str
-    element: str
-    x: int
-    y: int
-    width: int
-    height: int
-    tag_name: str
-    text: Optional[str] = None
-    attributes: Optional[Dict[str, str]] = None
-    iframe_index: Optional[int] = None
-    iframe_selector: Optional[str] = None
-
-
-@dataclass
-class AccessibilityNode:
-    role: str
-    name: Optional[str] = None
-    value: Optional[str] = None
-    description: Optional[str] = None
-    keyshortcuts: Optional[str] = None
-    roledescription: Optional[str] = None
-    valuetext: Optional[str] = None
-    disabled: bool = False
-    expanded: Optional[bool] = None
-    focused: bool = False
-    modal: bool = False
-    multiline: bool = False
-    multiselectable: bool = False
-    readonly: bool = False
-    required: bool = False
-    selected: Optional[bool] = None
-    checked: Optional[bool] = None
-    pressed: Optional[bool] = None
-    level: Optional[int] = None
-    valuemin: Optional[float] = None
-    valuemax: Optional[float] = None
-    autocomplete: Optional[str] = None
-    haspopup: Optional[str] = None
-    invalid: Optional[str] = None
-    orientation: Optional[str] = None
-    children: List["AccessibilityNode"] = None
-
-    def __post_init__(self):
-        if self.children is None:
-            self.children = []
-
-
 class PageSnapshot:
-    def __init__(self, page: "Page"):
+    def __init__(self, page: Page):
         self.page = page
-        self._accessibility_tree: Optional[AccessibilityNode] = None
-        self._element_references: Dict[str, ElementReference] = {}
+        self._aria_snapshot_text: Optional[str] = None
         self._screenshot_data: Optional[bytes] = None
-        self._page_text: Optional[str] = None
         self._url: Optional[str] = None
         self._title: Optional[str] = None
         self._timestamp: Optional[str] = None
+        self._last_snapshot_frame_ids: List[str] = []
+        self._frame_counter: int = 0
 
-    async def capture(self, include_screenshot: bool = True) -> None:
-        logger.debug("Capturing page snapshot")
-
+    async def capture(
+        self, include_screenshot: bool = True, timeout: float = 30000
+    ) -> None:
         try:
             self._url = self.page.url
             self._title = await self.page.title()
-
-            await self._capture_accessibility_tree()
-
-            await self._capture_element_references()
+            self._last_snapshot_frame_ids = []
+            snapshot_lines = await self._snapshot_frame_for_ai(
+                self.page.main_frame, 0, timeout
+            )
+            if isinstance(snapshot_lines, list):
+                self._aria_snapshot_text = (
+                    "\n".join(snapshot_lines) if snapshot_lines else ""
+                )
+            else:
+                self._aria_snapshot_text = snapshot_lines or ""
 
             if include_screenshot:
                 await self._capture_screenshot()
 
-            await self._capture_page_text()
-
             self._timestamp = datetime.now().isoformat()
 
-            logger.info(
-                f"Snapshot captured: {len(self._element_references)} elements, URL: {self._url}"
-            )
+            logger.info(f"Playwright-compatible snapshot captured for URL: {self._url}")
 
         except Exception as e:
-            logger.error(f"Error capturing snapshot: {e}")
+            logger.error(f"Critical error in snapshot capture: {type(e).__name__}: {e}")
+            logger.error(f"Capture context - URL: {self._url}, Timeout: {timeout}ms")
+            logger.error(f"Frame IDs tracked: {len(self._last_snapshot_frame_ids)}")
+
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             raise
 
-    async def _capture_accessibility_tree(self) -> None:
+    def get_snapshot_for_ai(self) -> str:
+        return self._aria_snapshot_text or "No snapshot available"
+
+    async def snapshot_for_ai(self, timeout: float = 30000) -> str:
         try:
-            accessibility_tree = await self.page.accessibility.snapshot(
-                interesting_only=True, root=None
+            self._last_snapshot_frame_ids = []
+            self._frame_counter = 0
+            snapshot_lines = await self._snapshot_frame_for_ai(
+                self.page.main_frame, 0, self._last_snapshot_frame_ids, timeout
+            )
+            result = "\n".join(snapshot_lines) if snapshot_lines else ""
+            self._aria_snapshot_text = result
+            logger.info(f"snapshotForAI captured for URL: {self.page.url}")
+            return result
+        except Exception as e:
+            logger.error(f"snapshotForAI failed: {e}")
+            raise
+
+    async def _snapshotForAI(self) -> str:
+        return await self.snapshot_for_ai()
+
+    def ref_locator(self, params: Dict[str, str]) -> "Locator":
+        ref = params.get("ref", "")
+
+        if not ref:
+            raise ValueError("Reference 'ref' parameter is required")
+
+        current_snapshot = self._aria_snapshot_text or ""
+
+        if not current_snapshot:
+            raise ValueError(
+                "No snapshot available. Please capture a snapshot first using snapshot_for_ai()."
             )
 
-            if accessibility_tree:
-                self._accessibility_tree = self._convert_accessibility_node(
-                    accessibility_tree
+        if f"[ref={ref}]" not in current_snapshot:
+            raise ValueError(
+                f"Ref {ref} not found in the current page snapshot. Try capturing new snapshot."
+            )
+
+        if ref.startswith("f"):
+            frame_match = re.match(r"f(\d+)e\d+", ref)
+            if frame_match:
+                frame_ordinal = int(frame_match.group(1))
+                frames = self.page.frames
+
+                if 0 < frame_ordinal < len(frames):
+                    try:
+                        target_frame = frames[frame_ordinal]
+                        return target_frame.locator(f"[aria-ref='{ref}']")
+                    except Exception:
+                        pass
+
+            locator = self.page.locator(f"iframe >> [aria-ref='{ref}']")
+        else:
+            locator = self.page.locator(f"[aria-ref='{ref}']")
+
+        return locator
+
+    async def ref_locators(self, params_list: list[Dict[str, str]]) -> list["Locator"]:
+        snapshot = await self._snapshotForAI()
+        self._aria_snapshot_text = snapshot
+
+        locators = []
+        for params in params_list:
+            ref = params.get("ref", "")
+
+            if f"[ref={ref}]" not in snapshot:
+                raise ValueError(
+                    f"Ref {ref} not found in the current page snapshot. Try capturing new snapshot."
                 )
 
-        except Exception as e:
-            logger.warning(f"Failed to capture accessibility tree: {e}")
-            self._accessibility_tree = None
+            locator = self.page.locator(f"[aria-ref='{ref}']")
+            locators.append(locator)
 
-    def _convert_accessibility_node(self, node: Dict[str, Any]) -> AccessibilityNode:
-        children = []
-        if "children" in node:
-            children = [
-                self._convert_accessibility_node(child) for child in node["children"]
-            ]
+        return locators
 
-        return AccessibilityNode(
-            role=node.get("role", ""),
-            name=node.get("name"),
-            value=node.get("value"),
-            description=node.get("description"),
-            keyshortcuts=node.get("keyshortcuts"),
-            roledescription=node.get("roledescription"),
-            valuetext=node.get("valuetext"),
-            disabled=node.get("disabled", False),
-            expanded=node.get("expanded"),
-            focused=node.get("focused", False),
-            modal=node.get("modal", False),
-            multiline=node.get("multiline", False),
-            multiselectable=node.get("multiselectable", False),
-            readonly=node.get("readonly", False),
-            required=node.get("required", False),
-            selected=node.get("selected"),
-            checked=node.get("checked"),
-            pressed=node.get("pressed"),
-            level=node.get("level"),
-            valuemin=node.get("valuemin"),
-            valuemax=node.get("valuemax"),
-            autocomplete=node.get("autocomplete"),
-            haspopup=node.get("haspopup"),
-            invalid=node.get("invalid"),
-            orientation=node.get("orientation"),
-            children=children,
-        )
-
-    async def _capture_element_references(self) -> None:
+    async def _snapshot_frame_for_ai(
+        self,
+        frame: Frame,
+        frame_ordinal: int,
+        frame_ids: List[str],
+        timeout: float = 30000,
+    ) -> List[str]:
         try:
-            js_code = """
-            () => {
-                const elements = [];
-                const interactiveSelectors = [
-                    // Form elements
-                    'input', 'button', 'select', 'textarea', 'label', 'fieldset', 'legend',
-                    'option', 'optgroup', 'output', 'progress', 'meter',
-                    
-                    // Navigation & links
-                    'a', 'nav', 'area[href]',
-                    
-                    // Interactive content
-                    'details', 'summary', 'dialog',
-                    '[contenteditable="true"]', '[contenteditable=""]',
-                    
-                    // Elements with event handlers
-                    '[onclick]', '[onchange]', '[onsubmit]', '[onfocus]',
-                    '[onkeydown]', '[onkeyup]', '[onmousedown]', '[onmouseup]',
-                    
-                    // ARIA roles
-                    '[role="button"]', '[role="link"]', '[role="tab"]', '[role="tabpanel"]',
-                    '[role="menuitem"]', '[role="menuitemcheckbox"]', '[role="menuitemradio"]',
-                    '[role="option"]', '[role="checkbox"]', '[role="radio"]',
-                    '[role="slider"]', '[role="spinbutton"]', '[role="switch"]',
-                    '[role="textbox"]', '[role="searchbox"]', '[role="combobox"]',
-                    '[role="listbox"]', '[role="tree"]', '[role="treegrid"]', '[role="grid"]',
-                    '[role="gridcell"]', '[role="columnheader"]', '[role="rowheader"]',
-                    
-                    // Focusable elements
-                    '[tabindex]', '[tabindex="0"]', '[tabindex="-1"]',
-                    
-                    // Custom interactive patterns
-                    '.btn', '.button', '.clickable', '.interactive',
-                    '[data-toggle]', '[data-dismiss]', '[data-target]',
-                    
-                    // Media controls
-                    'video[controls]', 'audio[controls]', 'embed', 'object',
-                    
-                    // Semantic elements that might be interactive
-                    'h1', 'h2', 'h3', 'h4', 'h5', 'h6' // Headings for context
-                ];
-                
-                function scanDocument(doc, frameIndex = null, frameSelector = null) {
-                    const allElements = doc.querySelectorAll(interactiveSelectors.join(', '));
-                    
-                    allElements.forEach((el, index) => {
-                        const rect = el.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {
-                            const refIndex = frameIndex !== null ? `${frameIndex}_${index}` : `${index}`;
-                            const ref = `element_${refIndex}`;
-                            el.setAttribute('data-ref', ref);
+            retry_timeouts = [1000, 2000, 4000, 8000]
+            snapshot_text = None
+
+            for retry_timeout in retry_timeouts:
+                try:
+                    ref_prefix = f"f{frame_ordinal}" if frame_ordinal > 0 else ""
+
+                    snapshot_or_retry = await frame.evaluate(
+                        """
+                        function(refPrefix) {
+                            var node = document.body;
+                            if (!node) return true;
                             
-                            // Generate smart element description
-                            let elementDescription = getSmartElementDescription(el);
-                            if (frameIndex !== null) {
-                                elementDescription = `[iframe] ${elementDescription}`;
+                            var refCounter = 1;
+                            var elements = new Map();
+                            var refs = new Map();
+                            
+                            function isElementVisible(el) {
+                                var style = getComputedStyle(el);
+                                return style.display !== 'none' && 
+                                       style.visibility !== 'hidden' && 
+                                       style.opacity !== '0';
                             }
                             
-                            function getSmartElementDescription(element) {
-                                const tag = element.tagName.toLowerCase();
-                                const type = element.type || '';
-                                const role = element.getAttribute('role') || '';
+                            function getSemanticRole(el) {
+                                var explicitRole = el.getAttribute('role');
+                                if (explicitRole) return explicitRole;
                                 
-                                // Get the best available text/label
-                                let text = '';
+                                var tag = el.tagName.toLowerCase();
+                                var typeMap = {
+                                    'button': 'button',
+                                    'input': getInputRole(el),
+                                    'textarea': 'textbox',
+                                    'select': 'combobox',
+                                    'option': 'option',
+                                    'optgroup': 'group',
+                                    'a': 'link',
+                                    'img': 'image',
+                                    'h1': 'heading', 'h2': 'heading', 'h3': 'heading',
+                                    'h4': 'heading', 'h5': 'heading', 'h6': 'heading',
+                                    'p': 'paragraph',
+                                    'ul': 'list', 'ol': 'list', 'dl': 'list',
+                                    'li': 'listitem', 'dt': 'listitem', 'dd': 'listitem',
+                                    'nav': 'navigation',
+                                    'main': 'main',
+                                    'aside': 'complementary',
+                                    'header': 'banner',
+                                    'footer': 'contentinfo',
+                                    'section': 'region',
+                                    'article': 'article',
+                                    'iframe': 'iframe',
+                                    'form': 'form',
+                                    'fieldset': 'group',
+                                    'legend': 'group',
+                                    'label': 'generic',
+                                    'table': 'table',
+                                    'thead': 'rowgroup',
+                                    'tbody': 'rowgroup', 
+                                    'tfoot': 'rowgroup',
+                                    'tr': 'row',
+                                    'th': 'columnheader',
+                                    'td': 'cell',
+                                    'caption': 'caption',
+                                    'details': 'group',
+                                    'summary': 'button',
+                                    'dialog': 'dialog',
+                                    'menu': 'menu',
+                                    'menuitem': 'menuitem',
+                                    'progress': 'progressbar',
+                                    'meter': 'progressbar',
+                                    'time': 'time',
+                                    'mark': 'mark',
+                                    'code': 'code',
+                                    'pre': 'code',
+                                    'kbd': 'generic',
+                                    'samp': 'generic',
+                                    'var': 'generic',
+                                    'blockquote': 'blockquote',
+                                    'q': 'generic',
+                                    'cite': 'generic',
+                                    'abbr': 'generic',
+                                    'address': 'group',
+                                    'canvas': 'image',
+                                    'svg': 'image',
+                                    'video': 'video',
+                                    'audio': 'audio',
+                                    'source': 'generic',
+                                    'track': 'generic',
+                                    'object': 'generic',
+                                    'embed': 'generic',
+                                    'figure': 'figure',
+                                    'figcaption': 'caption',
+                                    'body': 'generic',
+                                    'div': 'generic',
+                                    'span': 'generic'
+                                };
+                                return typeMap[tag] || 'generic';
+                            }
+                            
+                            function getInputRole(el) {
+                                var type = el.type;
+                                if (type === 'button' || type === 'submit') return 'button';
+                                if (type === 'checkbox') return 'checkbox';
+                                if (type === 'radio') return 'radio';
+                                return 'textbox';
+                            }
+                            
+                            function getAccessibleName(el) {
+                                var ariaLabel = el.getAttribute('aria-label');
+                                if (ariaLabel) return ariaLabel.trim();
                                 
-                                // Priority order for getting element text
-                                if (element.getAttribute('aria-label')) {
-                                    text = element.getAttribute('aria-label');
-                                } else if (element.getAttribute('aria-labelledby')) {
-                                    const labelId = element.getAttribute('aria-labelledby');
-                                    const labelEl = doc.getElementById(labelId);
-                                    text = labelEl ? labelEl.textContent.trim() : '';
-                                } else if (element.placeholder) {
-                                    text = element.placeholder;
-                                } else if (element.title) {
-                                    text = element.title;
-                                } else if (element.alt) {
-                                    text = element.alt;
-                                } else if (element.value && (tag === 'button' || type === 'button' || type === 'submit')) {
-                                    text = element.value;
-                                } else if (element.textContent && element.textContent.trim()) {
-                                    text = element.textContent.trim();
-                                } else if (tag === 'label' && element.htmlFor) {
-                                    const targetEl = doc.getElementById(element.htmlFor);
-                                    if (targetEl) {
-                                        text = targetEl.placeholder || targetEl.name || 'form field';
-                                    }
-                                } else if (element.name) {
-                                    text = element.name.replace(/[_-]/g, ' ');
-                                } else if (element.id) {
-                                    text = element.id.replace(/[_-]/g, ' ');
+                                var ariaLabelledBy = el.getAttribute('aria-labelledby');
+                                if (ariaLabelledBy) {
+                                    var labelEl = document.getElementById(ariaLabelledBy);
+                                    if (labelEl && labelEl.textContent) return labelEl.textContent.trim();
                                 }
                                 
-                                // Limit text length but keep important words
-                                if (text.length > 50) {
-                                    text = text.substring(0, 47) + '...';
+                                var title = el.getAttribute('title');
+                                if (title) return title.trim();
+                                
+                                var placeholder = el.getAttribute('placeholder');
+                                if (placeholder) return placeholder.trim();
+                                
+                                var alt = el.getAttribute('alt');
+                                if (alt) return alt.trim();
+                                
+                                var tag = el.tagName.toLowerCase();
+                                if (['button', 'a', 'option'].includes(tag)) {
+                                    var text = el.textContent;
+                                    if (text) return text.trim();
                                 }
                                 
-                                // Generate semantic description based on element type
-                                let description = '';
+                                return '';
+                            }
+                            
+                            function isInteractiveElement(el) {
+                                var tag = el.tagName.toLowerCase();
+                                var style = getComputedStyle(el);
+                                return ['button', 'input', 'select', 'textarea', 'a', 'iframe'].indexOf(tag) !== -1 ||
+                                       el.hasAttribute('onclick') ||
+                                       el.hasAttribute('tabindex') ||
+                                       el.getAttribute('role') === 'button';
+                            }
+                            
+                            function shouldReceiveRef(el) {
+                                var role = getSemanticRole(el);
+                                var style = getComputedStyle(el);
                                 
-                                if (tag === 'input') {
-                                    switch (type) {
-                                        case 'text':
-                                        case '':
-                                            description = text ? `${text} textbox` : 'textbox';
-                                            break;
-                                        case 'password':
-                                            description = text ? `${text} password field` : 'password field';
-                                            break;
-                                        case 'email':
-                                            description = text ? `${text} email field` : 'email field';
-                                            break;
-                                        case 'tel':
-                                            description = text ? `${text} phone field` : 'phone field';
-                                            break;
-                                        case 'url':
-                                            description = text ? `${text} URL field` : 'URL field';
-                                            break;
-                                        case 'search':
-                                            description = text ? `${text} search box` : 'search box';
-                                            break;
-                                        case 'number':
-                                            description = text ? `${text} number field` : 'number field';
-                                            break;
-                                        case 'checkbox':
-                                            const checked = element.checked ? ' (checked)' : ' (unchecked)';
-                                            description = text ? `${text} checkbox${checked}` : `checkbox${checked}`;
-                                            break;
-                                        case 'radio':
-                                            const selected = element.checked ? ' (selected)' : '';
-                                            description = text ? `${text} radio button${selected}` : `radio button${selected}`;
-                                            break;
-                                        case 'submit':
-                                            description = text ? `${text} submit button` : 'submit button';
-                                            break;
-                                        case 'button':
-                                            description = text ? `${text} button` : 'button';
-                                            break;
-                                        case 'file':
-                                            description = text ? `${text} file upload` : 'file upload';
-                                            break;
-                                        case 'date':
-                                            description = text ? `${text} date picker` : 'date picker';
-                                            break;
-                                        case 'time':
-                                            description = text ? `${text} time picker` : 'time picker';
-                                            break;
-                                        case 'color':
-                                            description = text ? `${text} color picker` : 'color picker';
-                                            break;
-                                        case 'range':
-                                            description = text ? `${text} slider` : 'slider';
-                                            break;
-                                        default:
-                                            description = text ? `${text} ${type} input` : `${type} input`;
+                                if (style.pointerEvents === 'none' || style.display === 'none') {
+                                    return false;
+                                }
+                                
+                                if (['button', 'link', 'textbox', 'combobox', 'checkbox', 'radio'].includes(role)) {
+                                    return true;
+                                }
+                                
+                                if (['heading', 'paragraph', 'image', 'table', 'list', 'listitem'].includes(role)) {
+                                    return true;
+                                }
+                                
+                                if (['navigation', 'main', 'banner', 'contentinfo', 'article', 'form'].includes(role)) {
+                                    return true;
+                                }
+                                
+                                if (role === 'iframe') {
+                                    return true;
+                                }
+                                
+                                if (role === 'generic') {
+                                    var directText = '';
+                                    for (var i = 0; i < el.childNodes.length; i++) {
+                                        if (el.childNodes[i].nodeType === 3) { // Text node
+                                            directText += el.childNodes[i].textContent || '';
+                                        }
                                     }
-                                } else if (tag === 'button') {
-                                    const buttonType = type || 'button';
-                                    description = text ? `${text} button` : `${buttonType} button`;
-                                } else if (tag === 'select') {
-                                    description = text ? `${text} dropdown` : 'dropdown';
-                                } else if (tag === 'textarea') {
-                                    description = text ? `${text} text area` : 'text area';
-                                } else if (tag === 'a') {
-                                    const href = element.href ? ` (${element.href})` : '';
-                                    description = text ? `${text} link${href}` : `link${href}`;
-                                } else if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
-                                    description = text ? `${text} heading` : `${tag} heading`;
-                                } else if (tag === 'label') {
-                                    description = text ? `${text} label` : 'label';
-                                } else if (role) {
-                                    description = text ? `${text} (${role})` : role;
+                                    directText = directText.trim();
+                                    
+                                    if (directText && directText.length > 8) {
+                                        var skipPatterns = ['Copyright', 'All rights reserved', 'Grand Total', 'Total in'];
+                                        var hasSkipPattern = skipPatterns.some(function(pattern) {
+                                            return directText.includes(pattern);
+                                        });
+                                        if (!hasSkipPattern) {
+                                            return true;
+                                        }
+                                    }
+                                    
+                                    var interactiveChildren = el.querySelectorAll('button, a, input, select, textarea, [onclick], [role="button"]');
+                                    if (interactiveChildren.length > 0) {
+                                        return true;
+                                    }
+                                    
+                                    if (style.cursor === 'pointer') {
+                                        return true;
+                                    }
+                                    
+                                    return false;
+                                }
+                                
+                                if (['cell', 'columnheader'].includes(role)) {
+                                    var cellText = el.textContent && el.textContent.trim();
+                                    if (role === 'columnheader') return true;
+                                    
+                                    if (!cellText || cellText === '') return false;
+                                    
+                                    if (/^\d+$/.test(cellText)) return false;
+                                    
+                                    if (/^0\.0+$/.test(cellText)) return false;
+                                    
+                                    return cellText.length > 5;
+                                }
+                                
+                                if (['row', 'rowgroup'].includes(role)) {
+                                    return false;
+                                }
+                                
+                                if (['region', 'section', 'complementary', 'search', 'tabpanel', 'dialog', 'alertdialog'].includes(role)) {
+                                    return true;
+                                }
+                                
+                                return false;
+                            }
+                            
+                            function createAriaNode(el) {
+                                if (!isElementVisible(el)) return null;
+                                
+                                var role = getSemanticRole(el);
+                                var name = getAccessibleName(el);
+                                var ref = null;
+                                
+                                if (shouldReceiveRef(el)) {
+                                    ref = refPrefix + 'e' + refCounter++;
+                                    el.setAttribute('aria-ref', ref);
+                                    refs.set(el, ref);
+                                }
+                                
+                                var ariaNode = {
+                                    role: role,
+                                    name: name,
+                                    ref: ref,
+                                    children: [],
+                                    element: el,
+                                    props: {},
+                                    receivesPointerEvents: shouldReceiveRef(el),
+                                    active: el === document.activeElement
+                                };
+                                
+                                if (role === 'link' && el.hasAttribute('href')) {
+                                    ariaNode.props.url = el.getAttribute('href');
+                                }
+                                
+                                if (el.hasAttribute('checked') || el.checked) ariaNode.checked = true;
+                                if (el.hasAttribute('disabled') || el.disabled) ariaNode.disabled = true;
+                                
+                                for (var i = 0; i < el.childNodes.length; i++) {
+                                    var child = el.childNodes[i];
+                                    if (child.nodeType === 3 && child.nodeValue) {
+                                        var text = child.nodeValue.trim();
+                                        if (text && role !== 'textbox') {
+                                            ariaNode.children.push(text);
+                                        }
+                                    }  
+                                }
+                                
+                                for (var i = 0; i < el.children.length; i++) {
+                                    var childNode = createAriaNode(el.children[i]);
+                                    if (childNode) {
+                                        ariaNode.children.push(childNode);
+                                    }
+                                }
+                                
+                                return ariaNode;
+                            }
+                            
+                            function normalizeGenericRoles(node) {
+                                function normalizeChildren(node) {
+                                    if (!node || !node.children) return [node];
+                                    
+                                    var result = [];
+                                    for (var i = 0; i < node.children.length; i++) {
+                                        var child = node.children[i];
+                                        if (typeof child === 'string') {
+                                            result.push(child);
+                                            continue;
+                                        }
+                                        var normalized = normalizeChildren(child);
+                                        for (var j = 0; j < normalized.length; j++) {
+                                            result.push(normalized[j]);
+                                        }
+                                    }
+                                    
+                                    var removeSelf = node.role === 'generic' && result.length <= 1 && 
+                                        result.every(function(c) { return typeof c !== 'string' && !!c.ref; });
+                                    if (removeSelf) {
+                                        return result;
+                                    }
+                                    
+                                    node.children = result;
+                                    return [node];
+                                }
+                                
+                                normalizeChildren(node);
+                            }
+                            
+                            function renderToLines(ariaNode, depth) {
+                                depth = depth || 0;
+                                var lines = [];
+                                var indent = '  '.repeat(depth);
+                                
+                                var line = indent + '- ' + ariaNode.role;
+                                
+                                if (ariaNode.name && ariaNode.name.length > 0) {
+                                    line += ' "' + ariaNode.name + '"';
+                                }
+                                
+                                if (ariaNode.checked) line += ' [checked]';
+                                if (ariaNode.disabled) line += ' [disabled]';
+                                if (ariaNode.active) line += ' [active]';
+                                
+                                if (ariaNode.ref) {
+                                    line += ' [ref=' + ariaNode.ref + ']';
+                                    var style = getComputedStyle(ariaNode.element);
+                                    if (style.cursor === 'pointer') {
+                                        line += ' [cursor=pointer]';
+                                    }
+                                }
+                                
+                                var hasProps = ariaNode.props && Object.keys(ariaNode.props).length > 0;
+                                var hasChildren = ariaNode.children && ariaNode.children.length > 0;
+                                
+                                if (!hasChildren && !hasProps) {
+                                    lines.push(line);
+                                } else if (hasChildren && ariaNode.children.length === 1 && typeof ariaNode.children[0] === 'string' && !hasProps) {
+                                    var text = ariaNode.children[0];
+                                    lines.push(line + ': ' + text);
                                 } else {
-                                    description = text ? `${text} (${tag})` : tag;
+                                    lines.push(line + ':');
+                                    
+                                    if (hasProps) {
+                                        for (var prop in ariaNode.props) {
+                                            lines.push(indent + '  - /' + prop + ': ' + ariaNode.props[prop]);
+                                        }
+                                    }
+                                    
+                                    if (hasChildren) {
+                                        for (var i = 0; i < ariaNode.children.length; i++) {
+                                            var child = ariaNode.children[i];
+                                            if (typeof child === 'string') {
+                                                lines.push(indent + '  - text: ' + child);
+                                            } else {
+                                                var childLines = renderToLines(child, depth + 1);
+                                                for (var j = 0; j < childLines.length; j++) {
+                                                    lines.push(childLines[j]);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 
-                                // Add state information
-                                const states = [];
-                                if (element.disabled) states.push('disabled');
-                                if (element.readOnly) states.push('readonly');
-                                if (element.required) states.push('required');
-                                if (element.hidden) states.push('hidden');
-                                
-                                if (states.length > 0) {
-                                    description += ` [${states.join(', ')}]`;
-                                }
-                                
-                                return description;
+                                return lines;
                             }
                             
-                            elements.push({
-                                ref: ref,
-                                element: elementDescription,
-                                x: Math.round(rect.left + rect.width / 2),
-                                y: Math.round(rect.top + rect.height / 2),
-                                width: Math.round(rect.width),
-                                height: Math.round(rect.height),
-                                tag_name: el.tagName.toLowerCase(),
-                                text: el.textContent ? el.textContent.trim() : null,
-                                iframe_index: frameIndex,
-                                iframe_selector: frameSelector,
-                                attributes: {
-                                    // Basic attributes
-                                    id: el.id || null,
-                                    class: el.className || null,
-                                    type: el.type || null,
-                                    name: el.name || null,
-                                    value: el.value || null,
-                                    
-                                    // Link attributes
-                                    href: el.href || null,
-                                    target: el.target || null,
-                                    
-                                    // Form attributes
-                                    placeholder: el.placeholder || null,
-                                    required: el.required || null,
-                                    disabled: el.disabled || null,
-                                    readonly: el.readOnly || null,
-                                    checked: el.checked || null,
-                                    selected: el.selected || null,
-                                    multiple: el.multiple || null,
-                                    
-                                    // Accessibility attributes
-                                    role: el.getAttribute('role') || null,
-                                    'aria-label': el.getAttribute('aria-label') || null,
-                                    'aria-labelledby': el.getAttribute('aria-labelledby') || null,
-                                    'aria-describedby': el.getAttribute('aria-describedby') || null,
-                                    'aria-expanded': el.getAttribute('aria-expanded') || null,
-                                    'aria-checked': el.getAttribute('aria-checked') || null,
-                                    'aria-selected': el.getAttribute('aria-selected') || null,
-                                    'aria-hidden': el.getAttribute('aria-hidden') || null,
-                                    
-                                    // Additional useful attributes
-                                    title: el.title || null,
-                                    alt: el.alt || null,
-                                    tabindex: el.tabIndex !== -1 ? el.tabIndex : null,
-                                    
-                                    // Data attributes (for custom functionality)
-                                    'data-toggle': el.getAttribute('data-toggle') || null,
-                                    'data-target': el.getAttribute('data-target') || null,
-                                    'data-dismiss': el.getAttribute('data-dismiss') || null,
-                                    
-                                    // Computed properties
-                                    visible: rect.width > 0 && rect.height > 0,
-                                    enabled: !el.disabled,
-                                    focusable: el.tabIndex >= 0 || ['input', 'button', 'select', 'textarea', 'a'].includes(el.tagName.toLowerCase()),
-                                    
-                                    // Element context
-                                    tag_name: el.tagName.toLowerCase(),
-                                    text_content: el.textContent ? el.textContent.trim().substring(0, 100) : null,
-                                    inner_text: el.innerText ? el.innerText.trim().substring(0, 100) : null
-                                }
-                            });
-                        }
-                    });
-                }
-                
-                scanDocument(document);
-                
-                const iframes = document.querySelectorAll('iframe');
-                iframes.forEach((iframe, frameIndex) => {
-                    try {
-                        const iframeRect = iframe.getBoundingClientRect();
-                        const isVisible = iframeRect.width > 0 && iframeRect.height > 0;
-                        
-                        if (!isVisible) {
-                            console.log(`Skipping hidden iframe ${frameIndex}`);
-                            return;
-                        }
-                        
-                        let frameSelector = '';
-                        if (iframe.id) {
-                            frameSelector = `#${iframe.id}`;
-                        } else if (iframe.name) {
-                            frameSelector = `[name="${iframe.name}"]`;
-                        } else if (iframe.src) {
-                            frameSelector = `iframe[src*="${iframe.src.split('/').pop()}"]`;
-                        } else {
-                            frameSelector = `iframe:nth-of-type(${frameIndex + 1})`;
-                        }
-                        
-                        let iframeDoc = null;
-                        try {
-                            iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                        } catch (accessError) {
-                            console.log(`Cross-origin iframe ${frameIndex}: ${accessError.message}`);
+                            var rootNode = createAriaNode(node);
+                            if (!rootNode) return '';
                             
-                            const iframeRef = `iframe_${frameIndex}`;
-                            iframe.setAttribute('data-ref', iframeRef);
+                            normalizeGenericRoles(rootNode);
+                            var lines = renderToLines(rootNode);
                             
-                            elements.push({
-                                ref: iframeRef,
-                                element: `[iframe] ${iframe.src || 'Unknown source'} (cross-origin)`,
-                                x: Math.round(iframeRect.left + iframeRect.width / 2),
-                                y: Math.round(iframeRect.top + iframeRect.height / 2),
-                                width: Math.round(iframeRect.width),
-                                height: Math.round(iframeRect.height),
-                                tag_name: 'iframe',
-                                text: null,
-                                iframe_index: frameIndex,
-                                iframe_selector: frameSelector,
-                                attributes: {
-                                    id: iframe.id || null,
-                                    name: iframe.name || null,
-                                    src: iframe.src || null,
-                                    cross_origin: true
-                                }
-                            });
-                            return;
+                            return lines.join('\\n');
                         }
-                        
-                        if (iframeDoc) {
-                            scanDocument(iframeDoc, frameIndex, frameSelector);
-                            
-                            const iframeRef = `iframe_container_${frameIndex}`;
-                            iframe.setAttribute('data-ref', iframeRef);
-                            
-                            elements.push({
-                                ref: iframeRef,
-                                element: `[iframe-container] ${iframe.src || 'Unknown source'}`,
-                                x: Math.round(iframeRect.left + iframeRect.width / 2),
-                                y: Math.round(iframeRect.top + iframeRect.height / 2),
-                                width: Math.round(iframeRect.width),
-                                height: Math.round(iframeRect.height),
-                                tag_name: 'iframe',
-                                text: null,
-                                iframe_index: null,
-                                iframe_selector: frameSelector,
-                                attributes: {
-                                    id: iframe.id || null,
-                                    name: iframe.name || null,
-                                    src: iframe.src || null,
-                                    cross_origin: false
-                                }
-                            });
-                        }
-                    } catch (e) {
-                        console.log(`Error processing iframe ${frameIndex}: ${e.message}`);
-                    }
-                });
-                
-                return elements;
-            }
-            """
+                        """,
+                        ref_prefix,
+                    )
 
-            elements_data = await self.page.evaluate(js_code)
+                    if snapshot_or_retry is not True:
+                        snapshot_text = snapshot_or_retry
+                        break
 
-            self._element_references = {}
-            for elem_data in elements_data:
-                ref = ElementReference(
-                    ref=elem_data["ref"],
-                    element=elem_data["element"],
-                    x=elem_data["x"],
-                    y=elem_data["y"],
-                    width=elem_data["width"],
-                    height=elem_data["height"],
-                    tag_name=elem_data["tag_name"],
-                    text=elem_data["text"],
-                    attributes=elem_data["attributes"],
+                    await asyncio.sleep(retry_timeout / 1000)
+
+                except Exception as e:
+                    if self._is_non_retriable_error(e):
+                        raise
+                    if retry_timeout == retry_timeouts[-1]:
+                        raise
+                    await asyncio.sleep(retry_timeout / 1000)
+
+            if not snapshot_text:
+                return []
+
+            lines = snapshot_text.split("\n")
+            result = []
+
+            for line in lines:
+                iframe_match = re.match(
+                    r"^(\s*)- iframe (?:\[active\] )?\[ref=([^\]]*)\](.*)$", line
                 )
-                if elem_data.get("iframe_index") is not None:
-                    ref.iframe_index = elem_data["iframe_index"]
-                    ref.iframe_selector = elem_data["iframe_selector"]
-                else:
-                    ref.iframe_index = None
-                    ref.iframe_selector = None
+                if iframe_match:
+                    leading_space = iframe_match.group(1)
+                    ref = iframe_match.group(2)
 
-                self._element_references[ref.ref] = ref
+                    result.append(line)
+
+                    try:
+                        iframe_content = (
+                            await self._capture_iframe_content_typescript_style(
+                                frame, ref, frame_ordinal, frame_ids
+                            )
+                        )
+                        if iframe_content:
+                            for content_line in iframe_content:
+                                indented_line = leading_space + "  " + content_line
+                                result.append(indented_line)
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to capture iframe content for {ref}: {e}"
+                        )
+                        pass
+                else:
+                    result.append(line)
+
+            return result
 
         except Exception as e:
-            logger.warning(f"Failed to capture element references: {e}")
-            self._element_references = {}
+            logger.error(f"Error in _snapshot_frame_for_ai: {e}")
+            if self._is_non_retriable_error(e):
+                raise
+            return []
+
+    async def _capture_iframe_content_typescript_style(
+        self,
+        parent_frame: Frame,
+        iframe_ref: str,
+        parent_frame_ordinal: int,
+        frame_ids: List[str],
+    ) -> List[str]:
+        try:
+            try:
+                iframe_locator = parent_frame.locator(f"[aria-ref='{iframe_ref}']")
+                iframe_element = await iframe_locator.element_handle(timeout=2000)
+                if not iframe_element:
+                    return []
+
+                content_frame = await iframe_element.content_frame()
+                if not content_frame:
+                    return []
+
+            except Exception:
+                try:
+                    frame_locator = parent_frame.frame_locator(
+                        f"[aria-ref='{iframe_ref}']"
+                    )
+                    await frame_locator.locator("body").count()
+                    return []
+                except Exception:
+                    return []
+
+            frame_ordinal = len(frame_ids) + 1
+
+            try:
+                frame_id = getattr(content_frame, "_guid", content_frame.url)
+                frame_ids.append(frame_id)
+                logger.debug(f"Added frame ID: {frame_id}")
+            except Exception as e:
+                logger.warning(f"Failed to get frame ID: {e}, using URL instead")
+                frame_ids.append(content_frame.url)
+
+            try:
+                child_snapshot = await self._snapshot_frame_for_ai(
+                    content_frame, frame_ordinal, frame_ids
+                )
+                return child_snapshot
+
+            except Exception as e:
+                logger.warning(f"Failed to capture iframe snapshot: {e}")
+                return []
+
+        except Exception as e:
+            logger.warning(f"Error capturing iframe content for {iframe_ref}: {e}")
+            return []
+
+    def get_last_snapshot_frame_ids(self) -> List[str]:
+        return self._last_snapshot_frame_ids.copy()
+
+    def to_dict(self) -> dict:
+        return {
+            "url": self._url,
+            "title": self._title,
+            "timestamp": self._timestamp,
+            "has_screenshot": self.has_screenshot,
+        }
+
+    def _is_non_retriable_error(self, error: Exception) -> bool:
+        error_str = str(error).lower()
+
+        non_retriable_patterns = [
+            "page closed",
+            "page crashed",
+            "context closed",
+            "browser closed",
+            "navigation failed",
+            "net::err_aborted",
+        ]
+
+        return any(pattern in error_str for pattern in non_retriable_patterns)
 
     async def _capture_screenshot(self) -> None:
         try:
-            self._screenshot_data = await self.page.screenshot(
-                full_page=True, type="png"
-            )
+            self._screenshot_data = await self.page.screenshot(full_page=True)
+            logger.debug("Screenshot captured successfully")
         except Exception as e:
-            logger.warning(f"Failed to capture screenshot: {e}")
+            logger.error(f"Error capturing screenshot: {e}")
             self._screenshot_data = None
 
-    async def _capture_page_text(self) -> None:
-        try:
-            self._page_text = await self.page.evaluate("() => document.body.innerText")
-        except Exception as e:
-            logger.warning(f"Failed to capture page text: {e}")
-            self._page_text = ""
-
+    @property
     def url(self) -> Optional[str]:
         return self._url
 
+    @property
     def title(self) -> Optional[str]:
         return self._title
 
-    def text(self) -> str:
-        if not self._accessibility_tree and not self._page_text:
-            return "No snapshot data available"
-
-        lines = []
-
-        if self._url:
-            lines.append(f"Page URL: {self._url}")
-        if self._title:
-            lines.append(f"Page Title: {self._title}")
-        lines.append("")
-
-        if self._accessibility_tree:
-            lines.append("Accessibility Tree:")
-            lines.extend(self._format_accessibility_tree(self._accessibility_tree))
-            lines.append("")
-
-        if self._element_references:
-            lines.append("Interactive Elements:")
-            iframe_count = 0
-            main_count = 0
-
-            for ref, elem in self._element_references.items():
-                if elem.iframe_index is not None:
-                    iframe_count += 1
-                    lines.append(
-                        f"  [{ref}] {elem.element} at ({elem.x}, {elem.y}) [iframe#{elem.iframe_index}]"
-                    )
-                else:
-                    main_count += 1
-                    lines.append(f"  [{ref}] {elem.element} at ({elem.x}, {elem.y})")
-
-            if iframe_count > 0:
-                lines.append(f"Elements in main document: {main_count}")
-                lines.append(f"Elements in iframes: {iframe_count}")
-            lines.append("")
-
-        if not self._accessibility_tree and self._page_text:
-            lines.append("Page Text:")
-            lines.append(self._page_text[:2000])  # Limit text length
-
-        return "\n".join(lines)
-
-    def _format_accessibility_tree(
-        self, node: AccessibilityNode, indent: int = 0
-    ) -> List[str]:
-        lines = []
-        prefix = "  " * indent
-
-        node_info = f"{prefix}{node.role}"
-        if node.name:
-            node_info += f": {node.name}"
-        if node.value:
-            node_info += f" = {node.value}"
-
-        lines.append(node_info)
-
-        for child in node.children:
-            lines.extend(self._format_accessibility_tree(child, indent + 1))
-
-        return lines
-
-    def get_element_reference(self, ref: str) -> Optional[ElementReference]:
-        return self._element_references.get(ref)
-
-    def get_all_element_references(self) -> Dict[str, ElementReference]:
-        return self._element_references.copy()
-
-    def ref_locator(self, params: Dict[str, str]) -> "Locator":
-        element = params.get("element", "")
-        ref = params.get("ref", "")
-
-        element_ref = self.get_element_reference(ref)
-
-        if element_ref and element_ref.iframe_index is not None:
-            try:
-                if element_ref.iframe_selector:
-                    frame_locator = self.page.frame_locator(element_ref.iframe_selector)
-                    return frame_locator.locator(f"[data-ref='{ref}']")
-                else:
-                    frame_locator = self.page.frame_locator(
-                        f"iframe:nth-of-type({element_ref.iframe_index + 1})"
-                    )
-                    return frame_locator.locator(f"[data-ref='{ref}']")
-            except Exception as e:
-                print(f"Warning: Failed to access iframe for ref {ref}: {e}")
-                return self.page.locator(f"[data-ref='{ref}']")
-        else:
-            return self.page.locator(f"[data-ref='{ref}']")
-
+    @property
     def has_screenshot(self) -> bool:
         return self._screenshot_data is not None
 
     def get_screenshot_data(self) -> Optional[bytes]:
         return self._screenshot_data
 
-    async def save_screenshot(self, path: Path) -> bool:
-        if not self._screenshot_data:
-            return False
+    def get_all_element_references(self) -> dict:
+        return {}
 
+    def get_element_reference(self, ref: str) -> Optional[dict]:
+        return None
+
+    async def save_screenshot(self, filepath: str) -> bool:
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "wb") as f:
-                f.write(self._screenshot_data)
-            return True
+            if not self._screenshot_data:
+                await self._capture_screenshot()
+
+            if self._screenshot_data:
+                with open(filepath, "wb") as f:
+                    f.write(self._screenshot_data)
+                return True
+            return False
         except Exception as e:
-            logger.error(f"Failed to save screenshot: {e}")
+            logger.error(f"Error saving screenshot: {e}")
             return False
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "url": self._url,
-            "title": self._title,
-            "timestamp": self._timestamp,
-            "has_screenshot": self.has_screenshot(),
-            "element_count": len(self._element_references),
-            "iframe_elements_count": len(
-                [
-                    ref
-                    for ref in self._element_references.values()
-                    if ref.iframe_index is not None
-                ]
-            ),
-            "accessibility_tree": (
-                self._accessibility_tree_to_dict() if self._accessibility_tree else None
-            ),
-            "element_references": {
-                ref: {
-                    "ref": elem.ref,
-                    "element": elem.element,
-                    "x": elem.x,
-                    "y": elem.y,
-                    "width": elem.width,
-                    "height": elem.height,
-                    "tag_name": elem.tag_name,
-                    "text": elem.text,
-                    "attributes": elem.attributes,
-                    "iframe_index": elem.iframe_index,
-                    "iframe_selector": elem.iframe_selector,
-                }
-                for ref, elem in self._element_references.items()
-            },
-        }
-
-    def _accessibility_tree_to_dict(self) -> Dict[str, Any]:
-        def node_to_dict(node: AccessibilityNode) -> Dict[str, Any]:
-            return {
-                "role": node.role,
-                "name": node.name,
-                "value": node.value,
-                "description": node.description,
-                "children": [node_to_dict(child) for child in node.children],
-            }
-
-        return node_to_dict(self._accessibility_tree)
-
-    def __str__(self) -> str:
-        return (
-            f"PageSnapshot(url={self._url}, elements={len(self._element_references)})"
-        )
+    def text(self) -> str:
+        return self._aria_snapshot_text or ""

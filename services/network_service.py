@@ -1,4 +1,3 @@
-from typing import Dict, Any, List, Optional
 from .base_service import BaseService, ServiceResult
 
 
@@ -42,34 +41,3 @@ class NetworkService(BaseService):
                 error=str(e),
             )
 
-    async def set_request_interception(
-        self, enabled: bool, patterns: Optional[List[str]] = None
-    ) -> ServiceResult:
-        try:
-            tab = self.context.current_tab_or_die()
-
-            if enabled:
-                patterns = patterns or ["**/*"]
-
-                for pattern in patterns:
-                    await tab.page.route(pattern, lambda route: route.continue_())
-
-                return ServiceResult(
-                    success=True,
-                    message=f"Request interception enabled for patterns: {patterns}",
-                    data={"enabled": True, "patterns": patterns},
-                )
-            else:
-                await tab.page.unroute("**/*")
-
-                return ServiceResult(
-                    success=True,
-                    message="Request interception disabled",
-                    data={"enabled": False, "patterns": []},
-                )
-        except Exception as e:
-            return ServiceResult(
-                success=False,
-                message=f"Failed to set request interception: {str(e)}",
-                error=str(e),
-            )

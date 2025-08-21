@@ -1,8 +1,8 @@
 import logging
-from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
-from mcp.types import Resource as MCPResource, ReadResourceResult
+from typing import Dict, List, Optional, Callable, TYPE_CHECKING
+from mcp.types import Resource as MCPResource, ReadResourceResult, TextResourceContents
 
-from .registry import resource_registry
+from .registry import get_default_resources, get_resource_by_uri
 
 if TYPE_CHECKING:
     from context import ServerContext
@@ -15,11 +15,18 @@ def get_resources_handlers(
 ) -> Dict[str, Callable]:
     async def list_resources() -> List[MCPResource]:
         try:
-            registry = context.resource_registry if context else resource_registry
-            resources = await registry.list_resources()
-            mcp_resources = [resource.to_mcp_resource() for resource in resources]
+            resources = get_default_resources()
+            mcp_resources = []
+            for resource in resources:
+                mcp_resource = MCPResource(
+                    uri=resource.uri,
+                    name=resource.name or str(resource.uri),
+                    description=resource.description,
+                    mimeType=resource.mime_type,
+                )
+                mcp_resources.append(mcp_resource)
 
-            logger.debug(f"Listed {len(mcp_resources)} resources")
+            logger.debug(f"Listed {len(mcp_resources)} FastMCP resources")
             return mcp_resources
 
         except Exception as e:
@@ -28,10 +35,27 @@ def get_resources_handlers(
 
     async def read_resource(uri: str) -> ReadResourceResult:
         try:
-            registry = context.resource_registry if context else resource_registry
-            result = await registry.read_resource(uri)
+            resource = get_resource_by_uri(uri)
+            if not resource:
+                raise ValueError(f"Resource not found: {uri}")
 
-            logger.debug(f"Read resource {uri}")
+            content = await resource.read()
+
+            if isinstance(content, str):
+                mcp_contents = [
+                    TextResourceContents(
+                        uri=resource.uri, mimeType=resource.mime_type, text=content
+                    )
+                ]
+            else:
+                mcp_contents = [
+                    TextResourceContents(
+                        uri=resource.uri, mimeType=resource.mime_type, text=str(content)
+                    )
+                ]
+
+            result = ReadResourceResult(contents=mcp_contents)
+            logger.debug(f"Read FastMCP resource {uri}")
             return result
 
         except Exception as e:
@@ -40,26 +64,18 @@ def get_resources_handlers(
 
     async def subscribe_resource(uri: str) -> None:
         try:
-            registry = context.resource_registry if context else resource_registry
-            success = await registry.subscribe_to_resource(uri, lambda x: None)
-
-            if success:
-                logger.debug(f"Subscribed to resource {uri}")
-            else:
-                logger.warning(f"Failed to subscribe to resource {uri}")
+            logger.debug(
+                f"Subscribe request for resource {uri} (not implemented in FastMCP)"
+            )
 
         except Exception as e:
             logger.error(f"Error subscribing to resource {uri}: {e}")
 
     async def unsubscribe_resource(uri: str) -> None:
         try:
-            registry = context.resource_registry if context else resource_registry
-            success = await registry.unsubscribe_from_resource(uri)
-
-            if success:
-                logger.debug(f"Unsubscribed from resource {uri}")
-            else:
-                logger.warning(f"Failed to unsubscribe from resource {uri}")
+            logger.debug(
+                f"Unsubscribe request for resource {uri} (not implemented in FastMCP)"
+            )
 
         except Exception as e:
             logger.error(f"Error unsubscribing from resource {uri}: {e}")

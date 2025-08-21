@@ -1,12 +1,6 @@
-import asyncio
 import logging
-from typing import Optional, Dict, Any, List, Callable, TYPE_CHECKING
-from pathlib import Path
-from playwright.async_api import Page, Dialog, FileChooser, Download
-
-if TYPE_CHECKING:
-    from .modal_state import ModalState, DialogModalState, FileChooserModalState
-    from .download_tracker import DownloadEntry
+from typing import Optional, Dict, Any, List, Callable
+from playwright.async_api import Page
 
 from .snapshot import PageSnapshot
 

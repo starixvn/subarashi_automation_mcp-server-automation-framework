@@ -2,10 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
-import sys
 from typing import List, Optional, TYPE_CHECKING
-
-logger = logging.getLogger(__name__)
 
 from .settings import (
     CLIOptions,
@@ -13,8 +10,6 @@ from .settings import (
     validate_config,
     sanitize_for_file_path,
 )
-
-from core.tool_schema import ToolCapability
 
 logger = logging.getLogger(__name__)
 
@@ -299,8 +294,13 @@ def validate_cli_options(cli_options: CLIOptions):
 
 def list_capabilities():
     print("Available tool capabilities:")
-    for capability in ToolCapability:
-        print(f"  - {capability.value}")
+    capabilities = [
+        "core", "vision", "tabs", "console", "keyboard", 
+        "network", "files", "wait", "pdf", "api", 
+        "google_sheets", "database"
+    ]
+    for capability in capabilities:
+        print(f"  - {capability}")
 
 
 async def resolve_enhanced_config(cli_options: CLIOptions):
@@ -341,7 +341,11 @@ def parse_capabilities(capabilities_str: Optional[str]) -> Optional[List[str]]:
 
     capabilities = [cap.strip() for cap in capabilities_str.split(",")]
 
-    valid_capabilities = set(cap.value for cap in ToolCapability)
+    valid_capabilities = {
+        "core", "vision", "tabs", "console", "keyboard", 
+        "network", "files", "wait", "pdf", "api", 
+        "google_sheets", "database"
+    }
     invalid_capabilities = set(capabilities) - valid_capabilities
 
     if invalid_capabilities:

@@ -1,8 +1,9 @@
 import logging
 from typing import Dict, List, Optional, Any, Callable
 from mcp.types import Prompt as MCPPrompt, GetPromptResult
+from mcp.server.fastmcp.prompts.base import Message
 
-from .registry import prompt_registry
+from .registry import get_default_prompts, get_prompt_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -10,10 +11,15 @@ logger = logging.getLogger(__name__)
 def get_prompts_handlers() -> Dict[str, Callable]:
     async def list_prompts() -> List[MCPPrompt]:
         try:
-            prompts = prompt_registry.list_prompts()
-            mcp_prompts = [prompt.to_mcp_prompt() for prompt in prompts]
+            prompts = get_default_prompts()
+            mcp_prompts = []
+            for prompt in prompts:
+                mcp_prompt = MCPPrompt(
+                    name=prompt.name, description=prompt.description, arguments=[]
+                )
+                mcp_prompts.append(mcp_prompt)
 
-            logger.debug(f"Listed {len(mcp_prompts)} prompts")
+            logger.debug(f"Listed {len(mcp_prompts)} FastMCP prompts")
             return mcp_prompts
 
         except Exception as e:
@@ -24,14 +30,23 @@ def get_prompts_handlers() -> Dict[str, Callable]:
         name: str, arguments: Optional[Dict[str, Any]] = None
     ) -> GetPromptResult:
         try:
-            prompt = prompt_registry.get_prompt(name)
+            prompt = get_prompt_by_name(name)
             if not prompt:
                 raise ValueError(f"Prompt '{name}' not found")
 
-            result = await prompt.render(arguments)
+            messages = await prompt.render(arguments or {})
+
+            mcp_messages = []
+            for msg in messages:
+                mcp_msg = Message(role=msg.role, content=msg.content)
+                mcp_messages.append(mcp_msg)
+
+            result = GetPromptResult(
+                description=prompt.description or "", messages=mcp_messages
+            )
 
             logger.debug(
-                f"Rendered prompt '{name}' with {len(result.messages)} messages"
+                f"Rendered FastMCP prompt '{name}' with {len(mcp_messages)} messages"
             )
             return result
 

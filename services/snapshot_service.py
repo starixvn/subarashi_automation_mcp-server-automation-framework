@@ -1,66 +1,70 @@
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, List
 from .base_service import BaseService
-
-if TYPE_CHECKING:
-    from context import ServerContext
-    from core.snapshot import PageSnapshot
+from core.snapshot import PageSnapshot
 
 
 class SnapshotService(BaseService):
-    async def capture_snapshot(self, include_screenshot: bool = True) -> Dict[str, Any]:
+    async def capture_snapshot_for_ai(self, timeout: float = 30000) -> Dict[str, Any]:
         try:
             tab = self.get_current_tab()
-            snapshot = await tab.capture_snapshot(include_screenshot=include_screenshot)
+            page = tab.page
 
-            element_refs = snapshot.get_all_element_references()
-            iframe_elements_count = len(
-                [ref for ref in element_refs.values() if ref.iframe_index is not None]
-            )
-            main_elements_count = len(element_refs) - iframe_elements_count
+            snapshot_obj = PageSnapshot(page)
 
-            element_categories = self._categorize_elements(element_refs)
-            detailed_elements = self._get_detailed_element_info(element_refs)
+            aria_snapshot = await snapshot_obj.snapshot_for_ai(timeout=timeout)
+
+            refs_found = self._extract_refs_from_aria_snapshot(aria_snapshot)
 
             return self.success_response(
                 data={
-                    "url": snapshot.url(),
-                    "title": snapshot.title(),
-                    "has_screenshot": snapshot.has_screenshot(),
-                    "element_count": len(element_refs),
-                    "main_elements_count": main_elements_count,
-                    "iframe_elements_count": iframe_elements_count,
-                    "snapshot_text": snapshot.text(),
-                    "element_categories": element_categories,
-                    "detailed_elements": detailed_elements,
-                    "accessibility_tree": snapshot.accessibility_tree_summary()
-                    if hasattr(snapshot, "accessibility_tree_summary")
-                    else None,
+                    "url": page.url,
+                    "title": await page.title(),
+                    "snapshot_text": aria_snapshot,
+                    "element_count": len(refs_found["main_refs"])
+                    + len(refs_found["iframe_refs"]),
+                    "main_elements_count": len(refs_found["main_refs"]),
+                    "iframe_elements_count": len(refs_found["iframe_refs"]),
+                    "refs_found": refs_found,
+                    "frames_processed": snapshot_obj.get_last_snapshot_frame_ids(),
                 },
-                message=f"Enhanced snapshot captured for {snapshot.url()} (Elements: {main_elements_count} main + {iframe_elements_count} iframe, Categories: {len(element_categories)})",
+                message=f"AI snapshot captured for {page.url} (Elements: {len(refs_found['main_refs'])} main + {len(refs_found['iframe_refs'])} iframe)",
             )
 
         except Exception as e:
-            return await self.handle_error(e, "capture_snapshot")
+            return await self.handle_error(e, "capture_snapshot_for_ai")
 
-    async def get_current_snapshot(self) -> Dict[str, Any]:
+    async def capture_snapshot(self, tab_id: str = None) -> Dict[str, Any]:
         try:
-            tab = self.get_current_tab()
+            if tab_id:
+                tab = self.context.get_tab(tab_id)
+                if not tab:
+                    return self.error_response(f"Tab {tab_id} not found")
+            else:
+                tab = self.get_current_tab()
 
-            if not tab.has_snapshot():
-                return self.success_response(data=None, message="No snapshot available")
+            page = tab.page
+            snapshot_obj = PageSnapshot(page)
+            aria_snapshot = await snapshot_obj.snapshot_for_ai()
 
-            snapshot = tab.get_current_snapshot()
+            tab.snapshot = snapshot_obj
+
+            refs_found = self._extract_refs_from_aria_snapshot(aria_snapshot)
 
             return self.success_response(
                 data={
-                    "url": snapshot.url(),
-                    "title": snapshot.title(),
-                    "has_screenshot": snapshot.has_screenshot(),
-                    "element_count": len(snapshot.get_all_element_references()),
-                    "snapshot_text": snapshot.text(),
-                },
-                message="Current snapshot retrieved",
+                    "snapshot_text": aria_snapshot,
+                    "url": page.url,
+                    "title": await page.title(),
+                    "element_count": len(refs_found["main_refs"])
+                    + len(refs_found["iframe_refs"]),
+                }
             )
+        except Exception as e:
+            return self.error_response(str(e))
+
+    async def get_current_snapshot(self) -> Dict[str, Any]:
+        try:
+            return await self.capture_snapshot_for_ai()
 
         except Exception as e:
             return await self.handle_error(e, "get_current_snapshot")
@@ -223,9 +227,9 @@ class SnapshotService(BaseService):
             return self.success_response(
                 data={
                     "has_snapshot": True,
-                    "url": snapshot.url(),
-                    "title": snapshot.title(),
-                    "has_screenshot": snapshot.has_screenshot(),
+                    "url": snapshot.url,
+                    "title": snapshot.title,
+                    "has_screenshot": snapshot.has_screenshot,
                     "element_count": len(element_refs),
                     "element_types": element_types,
                 },
@@ -376,3 +380,21 @@ class SnapshotService(BaseService):
             detailed_elements.append(element_info)
 
         return detailed_elements
+
+    def _extract_refs_from_aria_snapshot(
+        self, aria_snapshot: str
+    ) -> Dict[str, List[str]]:
+        import re
+
+        main_refs = []
+        iframe_refs = []
+        ref_pattern = r"\[ref=([^\]]+)\]"
+        refs = re.findall(ref_pattern, aria_snapshot)
+
+        for ref in refs:
+            if ref.startswith("f"):
+                iframe_refs.append(ref)
+            else:
+                main_refs.append(ref)
+
+        return {"main_refs": main_refs, "iframe_refs": iframe_refs, "all_refs": refs}

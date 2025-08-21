@@ -1,212 +1,136 @@
-from core.tool_schema import (
-    ToolCapability,
-    ToolType,
-    ToolResult,
-    ToolActionResult,
-    Tool,
-    ToolSchema,
-    ToolFactory,
-    ToolInputSchema,
-    define_tool,
-    define_tool_factory,
-    validate_tool_input,
-    tool_to_mcp_schema,
-    filter_tools_by_capabilities,
-)
+from mcp.server.fastmcp import FastMCP
+from typing import TYPE_CHECKING, List, Optional
+import logging
 
-from core.schemas import (
-    EmptyInputSchema,
-    NavigateInputSchema,
-    ResizeInputSchema,
-    ClickInputSchema,
-    TypeInputSchema,
-    HoverInputSchema,
-    SelectOptionInputSchema,
-    ScreenshotInputSchema,
-    SaveScreenshotInputSchema,
-    ScreenClickInputSchema,
-    ScreenDragInputSchema,
-    ScreenTypeInputSchema,
-    ScreenMoveMouseInputSchema,
-    DialogInputSchema,
-    SelectTabInputSchema,
-    NewTabInputSchema,
-    CloseTabInputSchema,
-    GetTextInputSchema,
-    WaitForSelectorInputSchema,
-    DragInputSchema,
-    WaitForInputSchema,
-    PressKeyInputSchema,
-    SetRequestInterceptionInputSchema,
-    UploadFileInputSchema,
-    ApiRequestInputSchema,
-    DatabaseConnectInputSchema,
-    DatabaseQueryInputSchema,
-    DatabaseExecuteInputSchema,
-    DatabaseListTablesInputSchema,
-    DatabaseDescribeTableInputSchema,
-    DatabaseCloseInputSchema,
-    GetPageHtmlInputSchema,
-    EvaluateJavaScriptInputSchema,
-)
+if TYPE_CHECKING:
+    from context import ServerContext
 
-from .core import get_core_tools
-from .interaction import get_interaction_tools
-from .snapshot import get_snapshot_tools, SNAPSHOT_TOOLS
-from .vision import get_vision_tools, get_screenshot_tools
-from .tabs import get_tab_tools
-from .dialogs import get_dialog_tools
-from .console import get_console_tools
-from .keyboard import get_keyboard_tools
-from .network import get_network_tools
-from .files import get_file_tools
-from .wait import get_wait_tools
-from .pdf import get_pdf_tools
-
-from .api import get_api_tools
-from .google_sheets import get_google_sheets_tools
-from .database import get_database_tools
-from .page_content import get_page_content_tools, PAGE_CONTENT_TOOLS
-from .evaluate import get_evaluate_tools, EVALUATE_TOOLS
-
-ALL_TOOLS = [
-    *get_core_tools(),
-    *get_vision_tools(),
-    *get_screenshot_tools(),
-    *get_tab_tools(),
-    *get_dialog_tools(),
-    *get_interaction_tools(),
-    *SNAPSHOT_TOOLS,
-    *get_console_tools(),
-    *get_keyboard_tools(),
-    *get_network_tools(),
-    *get_file_tools(),
-    *get_wait_tools(),
-    *get_pdf_tools(),
-    *get_api_tools(),
-    *get_google_sheets_tools(),
-    *get_database_tools(),
-    *PAGE_CONTENT_TOOLS,
-    *EVALUATE_TOOLS,
-]
+logger = logging.getLogger(__name__)
 
 
-def get_all_tools(capabilities=None, capture_snapshot=True):
-    all_tools = []
+def register_all_tools(
+    app: FastMCP, context: "ServerContext", capabilities: Optional[List[str]] = None
+) -> None:
+    if capabilities is None:
+        capabilities = [
+            "core",
+            "vision",
+            "tabs",
+            "console",
+            "keyboard",
+            "network",
+            "files",
+            "wait",
+            "api",
+            "google_sheets",
+            "database",
+        ]
 
-    if not capabilities or ToolCapability.CORE in capabilities:
-        all_tools.extend(get_core_tools(capture_snapshot))
+    logger.info(f"Registering tools for capabilities: {', '.join(capabilities)}")
+    capability_map = {
+        "core": _register_core_tools,
+        "tabs": _register_tab_tools,
+        "vision": _register_vision_tools,
+        "console": _register_console_tools,
+        "keyboard": _register_keyboard_tools,
+        "network": _register_network_tools,
+        "files": _register_files_tools,
+        "wait": _register_wait_tools,
+        "api": _register_api_tools,
+        "google_sheets": _register_google_sheets_tools,
+        "database": _register_database_tools,
+    }
 
-    if not capabilities or ToolCapability.VISION in capabilities:
-        all_tools.extend(get_vision_tools(capture_snapshot))
-        all_tools.extend(get_screenshot_tools(capture_snapshot))
+    registered_count = 0
 
-    if not capabilities or ToolCapability.TABS in capabilities:
-        all_tools.extend(get_tab_tools(capture_snapshot))
+    for capability in capabilities:
+        if capability in capability_map:
+            try:
+                capability_map[capability](app, context)
+                registered_count += 1
+                logger.debug(f"Registered {capability} tools")
+            except Exception as e:
+                logger.error(f"Failed to register {capability} tools: {e}")
+        else:
+            logger.warning(f"Unknown capability: {capability}")
 
-    if not capabilities or ToolCapability.CONSOLE in capabilities:
-        all_tools.extend(get_console_tools(capture_snapshot))
-
-    if not capabilities or ToolCapability.KEYBOARD in capabilities:
-        all_tools.extend(get_keyboard_tools(capture_snapshot))
-
-    if not capabilities or ToolCapability.NETWORK in capabilities:
-        all_tools.extend(get_network_tools(capture_snapshot))
-
-    if not capabilities or ToolCapability.FILES in capabilities:
-        all_tools.extend(get_file_tools(capture_snapshot))
-
-    if not capabilities or ToolCapability.WAIT in capabilities:
-        all_tools.extend(get_wait_tools(capture_snapshot))
-
-    if not capabilities or ToolCapability.PDF in capabilities:
-        all_tools.extend(get_pdf_tools(capture_snapshot))
-
-    if not capabilities or ToolCapability.API in capabilities:
-        all_tools.extend(get_api_tools(capture_snapshot))
-
-    if not capabilities or ToolCapability.GOOGLE_SHEETS in capabilities:
-        all_tools.extend(get_google_sheets_tools())
-
-    if not capabilities or ToolCapability.DATABASE in capabilities:
-        all_tools.extend(get_database_tools(capture_snapshot))
-
-    all_tools.extend(get_page_content_tools(capture_snapshot))
-    all_tools.extend(get_dialog_tools(capture_snapshot))
-    all_tools.extend(get_interaction_tools(capture_snapshot))
-    all_tools.extend(get_snapshot_tools(capture_snapshot))
-    all_tools.extend(EVALUATE_TOOLS)
-
-    return all_tools
+    logger.info(f"Successfully registered {registered_count} tool groups")
 
 
-__all__ = [
-    "ToolCapability",
-    "ToolType",
-    "ToolResult",
-    "ToolActionResult",
-    "Tool",
-    "ToolSchema",
-    "ToolFactory",
-    "ToolInputSchema",
-    "define_tool",
-    "define_tool_factory",
-    "validate_tool_input",
-    "tool_to_mcp_schema",
-    "filter_tools_by_capabilities",
-    "EmptyInputSchema",
-    "NavigateInputSchema",
-    "ResizeInputSchema",
-    "ClickInputSchema",
-    "TypeInputSchema",
-    "HoverInputSchema",
-    "SelectOptionInputSchema",
-    "ScreenshotInputSchema",
-    "SaveScreenshotInputSchema",
-    "ScreenClickInputSchema",
-    "ScreenDragInputSchema",
-    "ScreenTypeInputSchema",
-    "ScreenMoveMouseInputSchema",
-    "DialogInputSchema",
-    "SelectTabInputSchema",
-    "NewTabInputSchema",
-    "CloseTabInputSchema",
-    "GetTextInputSchema",
-    "WaitForSelectorInputSchema",
-    "DragInputSchema",
-    "WaitForInputSchema",
-    "PressKeyInputSchema",
-    "SetRequestInterceptionInputSchema",
-    "UploadFileInputSchema",
-    "ApiRequestInputSchema",
-    "DatabaseConnectInputSchema",
-    "DatabaseQueryInputSchema",
-    "DatabaseExecuteInputSchema",
-    "DatabaseListTablesInputSchema",
-    "DatabaseDescribeTableInputSchema",
-    "DatabaseCloseInputSchema",
-    "GetPageHtmlInputSchema",
-    "EvaluateJavaScriptInputSchema",
-    "get_core_tools",
-    "get_interaction_tools",
-    "get_snapshot_tools",
-    "SNAPSHOT_TOOLS",
-    "get_vision_tools",
-    "get_screenshot_tools",
-    "get_tab_tools",
-    "get_dialog_tools",
-    "get_console_tools",
-    "get_keyboard_tools",
-    "get_network_tools",
-    "get_file_tools",
-    "get_wait_tools",
-    "get_pdf_tools",
-    "get_api_tools",
-    "ALL_TOOLS",
-    "get_all_tools",
-    "get_google_sheets_tools",
-    "get_database_tools",
-    "get_page_content_tools",
-    "PAGE_CONTENT_TOOLS",
-    "EVALUATE_TOOLS",
-]
+def _register_core_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .core_tools import register_core_tools
+    from .interaction_tools import register_interaction_tools
+    from .content_tools import register_content_tools
+    from .evaluate_tools import register_evaluate_tools
+    from .dialog_tools import register_dialog_tools
+    from .snapshot_tools import register_snapshot_tools
+
+    register_core_tools(app, context)
+    register_interaction_tools(app, context)
+    register_content_tools(app, context)
+    register_evaluate_tools(app, context)
+    register_dialog_tools(app, context)
+    register_snapshot_tools(app, context)
+
+
+def _register_tab_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .tab_tools import register_tab_tools
+
+    register_tab_tools(app, context)
+
+
+def _register_vision_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .vision_tools import register_vision_tools
+
+    register_vision_tools(app, context)
+
+
+def _register_console_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .console_tools import register_console_tools
+
+    register_console_tools(app, context)
+
+
+def _register_keyboard_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .keyboard_tools import register_keyboard_tools
+
+    register_keyboard_tools(app, context)
+
+
+def _register_network_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .network_tools import register_network_tools
+
+    register_network_tools(app, context)
+
+
+def _register_files_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .files_tools import register_files_tools
+
+    register_files_tools(app, context)
+
+
+def _register_wait_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .wait_tools import register_wait_tools
+
+    register_wait_tools(app, context)
+
+
+def _register_api_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .api_tools import register_api_tools
+
+    register_api_tools(app, context)
+
+
+def _register_google_sheets_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .google_sheets_tools import register_google_sheets_tools
+
+    register_google_sheets_tools(app, context)
+
+
+def _register_database_tools(app: FastMCP, context: "ServerContext") -> None:
+    from .database_tools import register_database_tools
+
+    register_database_tools(app, context)
+
+
+__all__ = ["register_all_tools"]

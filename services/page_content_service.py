@@ -1,8 +1,5 @@
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional
 from .base_service import BaseService
-
-if TYPE_CHECKING:
-    from context import ServerContext
 
 try:
     from bs4 import BeautifulSoup
@@ -113,12 +110,12 @@ class PageContentService(BaseService):
     ) -> Dict[str, Any]:
         try:
             tab = self.get_current_tab()
-            snapshot = tab.snapshot_or_die()
 
             if element_ref and element_ref.get("ref") and element_ref.get("element"):
+                snapshot = tab.snapshot_or_die()
                 locator = snapshot.ref_locator(element_ref)
                 if not locator:
-                    return self.handle_error(
+                    return await self.handle_error(
                         ValueError(f"Element not found: {element_ref}"),
                         "evaluate_javascript",
                     )
@@ -128,7 +125,7 @@ class PageContentService(BaseService):
                 result = await tab.page.evaluate(function)
 
             return self.success_response(
-                {"result": result}, f"JavaScript evaluated successfully"
+                {"result": result}, "JavaScript evaluated successfully"
             )
         except Exception as e:
-            return self.handle_error(e, "evaluate_javascript")
+            return await self.handle_error(e, "evaluate_javascript")

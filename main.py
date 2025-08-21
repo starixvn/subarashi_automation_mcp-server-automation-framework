@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import sys
-from typing import List, Optional
 
 from config import (
     parse_enhanced_args,
@@ -9,7 +8,8 @@ from config import (
     resolve_enhanced_config,
     config_to_settings,
 )
-from server import MCPServer
+from server import create_fastmcp_app
+from context import ServerContext
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,50 +27,44 @@ async def main():
         if getattr(cli_options, "list_capabilities", False):
             list_capabilities()
             return
-
         config = await resolve_enhanced_config(cli_options)
-
         settings = config_to_settings(config)
 
-        logger.info("Starting MCP Automation Server")
-        logger.info(f"Browser: {config.browser.browser_name}")
-        logger.info(f"Headless: {config.browser.launch_options.headless}")
-        logger.info(f"Vision: {config.vision}")
-        logger.info(f"Output Dir: {config.output_dir}")
-        logger.info(f"Storage State: {config.browser.context_options.storage_state}")
-
+        logger.info(
+            f"MCP Server ready on {config.server.host or '127.0.0.1'}:{config.server.port or 8000}"
+        )
         if config.capabilities:
             logger.info(f"Capabilities: {', '.join(config.capabilities)}")
-
-        server = MCPServer(settings, capabilities=config.capabilities)
+        else:
+            logger.info("Capabilities: all")
+        port = config.server.port or 8000
+        host = config.server.host or "127.0.0.1"
+        settings = config_to_settings(config)
+        context = ServerContext(settings, capabilities=config.capabilities)
+        app = create_fastmcp_app(
+            port=port, host=host, capabilities=config.capabilities, context=context
+        )
 
         transport = getattr(cli_options, "transport", "stdio")
 
         try:
+            await context.start()
             if transport == "stdio":
-                await server.run_stdio()
-            elif transport == "websocket":
-                host = config.server.host
-                port = config.server.port or 8080
-                await server.run_websocket(host, port)
+                await app.run_stdio_async()
             elif transport == "sse":
-                host = config.server.host
-                port = config.server.port or 8080
-                await server.run_sse(host, port)
-            elif transport == "http":
-                host = config.server.host
-                port = config.server.port or 8080
-                await server.run_http(host, port)
+                await app.run_sse_async()
+            elif transport in ["http", "streamable-http"]:
+                await app.run_streamable_http_async()
+            else:
+                raise ValueError(f"Unknown transport: {transport}")
         except KeyboardInterrupt:
             logger.info("Server interrupted by user")
         except Exception as e:
             logger.error(f"Server error: {e}")
             raise
         finally:
-            try:
-                await server.cleanup_context()
-            except Exception as e:
-                logger.error(f"Error during cleanup: {e}")
+            await context.close()
+            logger.info("Server finished")
 
     except Exception as e:
         logger.error(f"Failed to start server: {e}")

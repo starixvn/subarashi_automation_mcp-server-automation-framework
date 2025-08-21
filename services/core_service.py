@@ -1,8 +1,5 @@
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any
 from .base_service import BaseService
-
-if TYPE_CHECKING:
-    from context import ServerContext
 
 
 class CoreService(BaseService):

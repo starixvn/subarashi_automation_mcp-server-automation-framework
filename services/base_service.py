@@ -1,6 +1,6 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Any, Dict, Optional, List
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import logging
 
 if TYPE_CHECKING:
