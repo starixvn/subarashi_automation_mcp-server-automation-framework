@@ -7,7 +7,7 @@ import tempfile
 from playwright.async_api import async_playwright, Browser, BrowserContext, Playwright
 
 if TYPE_CHECKING:
-    from ..config.settings import Settings
+    from ..config.settings import FullConfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,8 @@ class BrowserContextResult:
 
 
 class BrowserContextFactory(ABC):
-    def __init__(self, settings: "Settings"):
-        self.settings = settings
+    def __init__(self, config: "FullConfig"):
+        self.config = config
         self.name = "base"
 
     @abstractmethod
@@ -32,8 +32,8 @@ class BrowserContextFactory(ABC):
 
 
 class BrowserContextManager:
-    def __init__(self, settings: "Settings"):
-        self.settings = settings
+    def __init__(self, config: "FullConfig"):
+        self.config = config
         self._factories: Dict[str, BrowserContextFactory] = {}
         self._current_factory: Optional[BrowserContextFactory] = None
 
@@ -52,13 +52,13 @@ class BrowserContextManager:
             cdp_endpoint = kwargs.get("cdp_endpoint")
             if not cdp_endpoint:
                 raise ValueError("CDP endpoint required for CDP factory")
-            return CDPContextFactory(self.settings, cdp_endpoint)
+            return CDPContextFactory(self.config, cdp_endpoint)
         elif factory_type == "isolated":
-            return IsolatedContextFactory(self.settings)
+            return IsolatedContextFactory(self.config)
         elif factory_type == "persistent":
-            return PersistentContextFactory(self.settings)
+            return PersistentContextFactory(self.config)
         else:
-            return create_browser_context_factory(self.settings, **kwargs)
+            return create_browser_context_factory(self.config, **kwargs)
 
     async def create_context(
         self, factory_type: str = "default", **kwargs
@@ -81,8 +81,8 @@ class BrowserContextManager:
 
 
 class BaseBrowserContextFactory(BrowserContextFactory):
-    def __init__(self, name: str, settings: "Settings"):
-        super().__init__(settings)
+    def __init__(self, name: str, config: "FullConfig"):
+        super().__init__(config)
         self.name = name
         self._browser_promise: Optional[asyncio.Task] = None
 
@@ -174,23 +174,23 @@ class BaseBrowserContextFactory(BrowserContextFactory):
 
 
 class IsolatedContextFactory(BaseBrowserContextFactory):
-    def __init__(self, settings: "Settings"):
-        super().__init__("isolated", settings)
+    def __init__(self, config: "FullConfig"):
+        super().__init__("isolated", config)
 
     async def _do_obtain_browser(self) -> Browser:
         playwright = await async_playwright().start()
 
-        if self.settings.browser_type == "chromium":
+        if self.config.browser_type == "chromium":
             browser_type = playwright.chromium
-        elif self.settings.browser_type == "firefox":
+        elif self.config.browser_type == "firefox":
             browser_type = playwright.firefox
-        elif self.settings.browser_type == "webkit":
+        elif self.config.browser_type == "webkit":
             browser_type = playwright.webkit
         else:
             browser_type = playwright.chromium
 
         launch_options = {
-            "headless": self.settings.headless,
+            "headless": self.config.headless,
             "handle_sigint": False,
             "handle_sigterm": False,
         }
@@ -210,15 +210,15 @@ class IsolatedContextFactory(BaseBrowserContextFactory):
     async def _do_create_context(self, browser: Browser) -> BrowserContext:
         context_options = {"viewport": {"width": 1280, "height": 720}}
 
-        if hasattr(self.settings, "storage_state") and self.settings.storage_state:
-            context_options["storage_state"] = self.settings.storage_state
+        if hasattr(self.config, "storage_state") and self.config.storage_state:
+            context_options["storage_state"] = self.config.storage_state
 
         return await browser.new_context(**context_options)
 
 
 class PersistentContextFactory(BrowserContextFactory):
-    def __init__(self, settings: "Settings"):
-        super().__init__(settings)
+    def __init__(self, config: "FullConfig"):
+        super().__init__(config)
         self.name = "persistent"
         self._user_data_dirs = set()
 
@@ -230,24 +230,24 @@ class PersistentContextFactory(BrowserContextFactory):
 
         playwright = await async_playwright().start()
 
-        if self.settings.browser_type == "chromium":
+        if self.config.browser_type == "chromium":
             browser_type = playwright.chromium
-        elif self.settings.browser_type == "firefox":
+        elif self.config.browser_type == "firefox":
             browser_type = playwright.firefox
-        elif self.settings.browser_type == "webkit":
+        elif self.config.browser_type == "webkit":
             browser_type = playwright.webkit
         else:
             browser_type = playwright.chromium
 
         launch_options = {
-            "headless": self.settings.headless,
+            "headless": self.config.headless,
             "handle_sigint": False,
             "handle_sigterm": False,
         }
 
         context_options = {"viewport": {"width": 1280, "height": 720}}
 
-        if hasattr(self.settings, "storage_state") and self.settings.storage_state:
+        if hasattr(self.config, "storage_state") and self.config.storage_state:
             logger.info(
                 "PersistentContextFactory: storage_state ignored (using persistent user data directory)"
             )
@@ -310,15 +310,15 @@ class PersistentContextFactory(BrowserContextFactory):
         import uuid
 
         unique_suffix = uuid.uuid4().hex[:8]
-        profile_dir = mcp_dir / f"{self.settings.browser_type}-profile-{unique_suffix}"
+        profile_dir = mcp_dir / f"{self.config.browser_type}-profile-{unique_suffix}"
 
         profile_dir.mkdir(parents=True, exist_ok=True)
         return str(profile_dir)
 
 
 class CDPContextFactory(BaseBrowserContextFactory):
-    def __init__(self, settings: "Settings", cdp_endpoint: str):
-        super().__init__("cdp", settings)
+    def __init__(self, config: "FullConfig", cdp_endpoint: str):
+        super().__init__("cdp", config)
         self.cdp_endpoint = cdp_endpoint
 
     async def _do_obtain_browser(self) -> Browser:
@@ -337,14 +337,14 @@ class CDPContextFactory(BaseBrowserContextFactory):
             raise error
 
     async def _do_create_context(self, browser: Browser) -> BrowserContext:
-        if getattr(self.settings, "isolated", False):
+        if getattr(self.config, "isolated", False):
             context_options = {"viewport": {"width": 1280, "height": 720}}
 
-            if hasattr(self.settings, "storage_state") and self.settings.storage_state:
+            if hasattr(self.config, "storage_state") and self.config.storage_state:
                 logger.info(
-                    f"CDPContextFactory (isolated) using storage_state: {self.settings.storage_state}"
+                    f"CDPContextFactory (isolated) using storage_state: {self.config.storage_state}"
                 )
-                context_options["storage_state"] = self.settings.storage_state
+                context_options["storage_state"] = self.config.storage_state
 
             return await browser.new_context(**context_options)
         else:
@@ -354,38 +354,35 @@ class CDPContextFactory(BaseBrowserContextFactory):
             else:
                 context_options = {"viewport": {"width": 1280, "height": 720}}
 
-                if (
-                    hasattr(self.settings, "storage_state")
-                    and self.settings.storage_state
-                ):
+                if hasattr(self.config, "storage_state") and self.config.storage_state:
                     logger.info(
-                        f"CDPContextFactory (new context) using storage_state: {self.settings.storage_state}"
+                        f"CDPContextFactory (new context) using storage_state: {self.config.storage_state}"
                     )
-                    context_options["storage_state"] = self.settings.storage_state
+                    context_options["storage_state"] = self.config.storage_state
 
                 return await browser.new_context(**context_options)
 
 
 def create_browser_context_factory(
-    settings: "Settings", **kwargs
+    config: "FullConfig", **kwargs
 ) -> BrowserContextFactory:
-    cdp_endpoint = kwargs.get("cdp_endpoint") or getattr(settings, "cdp_endpoint", None)
+    cdp_endpoint = kwargs.get("cdp_endpoint") or getattr(config, "cdp_endpoint", None)
     if cdp_endpoint:
-        return CDPContextFactory(settings, cdp_endpoint)
+        return CDPContextFactory(config, cdp_endpoint)
 
-    isolated = kwargs.get("isolated", False) or getattr(settings, "isolated", False)
+    isolated = kwargs.get("isolated", False) or getattr(config, "isolated", False)
     if isolated:
-        return IsolatedContextFactory(settings)
+        return IsolatedContextFactory(config)
 
-    if hasattr(settings, "storage_state") and settings.storage_state:
-        return IsolatedContextFactory(settings)
+    if hasattr(config, "storage_state") and config.storage_state:
+        return IsolatedContextFactory(config)
 
     persistent = kwargs.get("persistent", True)
     if persistent:
-        return PersistentContextFactory(settings)
+        return PersistentContextFactory(config)
 
-    return IsolatedContextFactory(settings)
+    return IsolatedContextFactory(config)
 
 
-def get_browser_context_manager(settings: "Settings") -> BrowserContextManager:
-    return BrowserContextManager(settings)
+def get_browser_context_manager(config: "FullConfig") -> BrowserContextManager:
+    return BrowserContextManager(config)

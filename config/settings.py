@@ -7,71 +7,6 @@ from datetime import datetime
 
 
 @dataclass
-class Settings:
-    browser_type: str = "chromium"
-    headless: bool = True
-    enable_vision: bool = False
-    output_dir: Optional[str] = None
-    user_data_dir: Optional[str] = None
-    cdp_endpoint: Optional[str] = None
-    isolated: bool = False
-    storage_state: Optional[str] = None
-    port: Optional[int] = None
-    host: Optional[str] = None
-
-    def __init__(
-        self,
-        browser_type: str = "chromium",
-        headless: bool = True,
-        enable_vision: bool = False,
-        output_dir: Optional[str] = None,
-        user_data_dir: Optional[str] = None,
-        cdp_endpoint: Optional[str] = None,
-        isolated: bool = False,
-        storage_state: Optional[str] = None,
-        port: Optional[int] = None,
-        host: Optional[str] = None,
-    ):
-        self.browser_type = browser_type
-        self.headless = headless
-        self.enable_vision = enable_vision
-
-        if output_dir:
-            self.output_dir = Path(output_dir)
-        else:
-            timestamp = datetime.now().isoformat().replace(":", "-").replace(".", "-")
-            project_root = Path(__file__).parent.parent
-            self.output_dir = project_root / "mcp_output" / timestamp
-
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        self.user_data_dir = Path(user_data_dir) if user_data_dir else None
-        self.cdp_endpoint = cdp_endpoint
-        self.isolated = isolated
-        self.storage_state = storage_state
-
-    @classmethod
-    def from_env(cls) -> "Settings":
-        return cls(
-            browser_type=os.getenv("MCP_BROWSER_TYPE", "chromium"),
-            headless=os.getenv("MCP_HEADLESS", "false").lower() == "true",
-            enable_vision=os.getenv("MCP_ENABLE_VISION", "false").lower() == "true",
-            output_dir=os.getenv("MCP_OUTPUT_DIR"),
-            user_data_dir=os.getenv("MCP_USER_DATA_DIR"),
-            cdp_endpoint=os.getenv("MCP_CDP_ENDPOINT"),
-            isolated=os.getenv("MCP_ISOLATED", "false").lower() == "true",
-            storage_state=os.getenv("MCP_STORAGE_STATE"),
-        )
-
-    def __str__(self) -> str:
-        return (
-            f"Settings(browser={self.browser_type}, headless={self.headless}, "
-            f"vision={self.enable_vision}, isolated={self.isolated}, "
-            f"storage_state={self.storage_state}, output_dir={self.output_dir})"
-        )
-
-
-@dataclass
 class LaunchOptions:
     channel: Optional[str] = None
     executable_path: Optional[str] = None
@@ -172,6 +107,42 @@ class FullConfig(Config):
             project_root = Path(__file__).parent.parent
             self.output_dir = str(project_root / "mcp_output" / timestamp)
 
+    @property
+    def browser_type(self) -> str:
+        return self.browser.browser_name
+
+    @property
+    def headless(self) -> bool:
+        return self.browser.launch_options.headless or False
+
+    @property
+    def enable_vision(self) -> bool:
+        return self.vision
+
+    @property
+    def isolated(self) -> bool:
+        return self.browser.isolated
+
+    @property
+    def storage_state(self) -> Optional[str]:
+        return self.browser.context_options.storage_state
+
+    @property
+    def cdp_endpoint(self) -> Optional[str]:
+        return self.browser.cdp_endpoint
+
+    @property
+    def user_data_dir(self) -> Optional[str]:
+        return self.browser.user_data_dir
+
+    @property
+    def port(self) -> Optional[int]:
+        return self.server.port
+
+    @property
+    def host(self) -> str:
+        return self.server.host
+
 
 def sanitize_for_file_path(name: str) -> str:
     invalid_chars = '<>:"/\\|?*'
@@ -190,7 +161,6 @@ def get_default_config() -> FullConfig:
             browser_name="chromium",
             launch_options=LaunchOptions(
                 channel="chrome",
-                # Always headless on server/CI, allow GUI on local dev
                 headless=os.name == "posix"
                 and not os.environ.get("DISPLAY")
                 and not os.environ.get("FORCE_GUI"),
@@ -481,37 +451,4 @@ def dict_to_full_config(data: Dict[str, Any]) -> FullConfig:
     )
 
 
-def config_to_settings(config: FullConfig) -> Settings:
-    return Settings(
-        browser_type=config.browser.browser_name,
-        headless=config.browser.launch_options.headless or False,
-        enable_vision=config.vision,
-        output_dir=config.output_dir,
-        user_data_dir=config.browser.user_data_dir,
-        cdp_endpoint=config.browser.cdp_endpoint,
-        isolated=config.browser.isolated,
-        storage_state=config.browser.context_options.storage_state,
-        port=config.server.port,
-        host=config.server.host,
-    )
-
-
-def settings_to_config(settings: Settings) -> FullConfig:
-    browser_config = BrowserConfig(
-        browser_name=settings.browser_type,
-        isolated=settings.isolated,
-        user_data_dir=settings.user_data_dir,
-        cdp_endpoint=settings.cdp_endpoint,
-        launch_options=LaunchOptions(
-            headless=settings.headless,
-        ),
-        context_options=ContextOptions(
-            storage_state=settings.storage_state,
-        ),
-    )
-
-    return FullConfig(
-        browser=browser_config,
-        vision=settings.enable_vision,
-        output_dir=str(settings.output_dir),
-    )
+# Legacy Settings class removed - use FullConfig directly with compatibility properties

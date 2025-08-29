@@ -6,7 +6,6 @@ from config import (
     parse_enhanced_args,
     list_capabilities,
     resolve_enhanced_config,
-    config_to_settings,
 )
 from server import create_fastmcp_app
 from context import ServerContext
@@ -28,7 +27,6 @@ async def main():
             list_capabilities()
             return
         config = await resolve_enhanced_config(cli_options)
-        settings = config_to_settings(config)
 
         logger.info(
             f"MCP Server ready on {config.server.host or '127.0.0.1'}:{config.server.port or 8000}"
@@ -39,8 +37,7 @@ async def main():
             logger.info("Capabilities: all")
         port = config.server.port or 8000
         host = config.server.host or "127.0.0.1"
-        settings = config_to_settings(config)
-        context = ServerContext(settings, capabilities=config.capabilities)
+        context = ServerContext(config, capabilities=config.capabilities)
         app = create_fastmcp_app(
             port=port, host=host, capabilities=config.capabilities, context=context
         )

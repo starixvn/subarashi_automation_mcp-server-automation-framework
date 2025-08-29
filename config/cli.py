@@ -1,14 +1,12 @@
 import argparse
-import asyncio
 import logging
 import os
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 
 from .settings import (
     CLIOptions,
     resolve_cli_config,
     validate_config,
-    sanitize_for_file_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -295,9 +293,17 @@ def validate_cli_options(cli_options: CLIOptions):
 def list_capabilities():
     print("Available tool capabilities:")
     capabilities = [
-        "core", "vision", "tabs", "console", "keyboard", 
-        "network", "files", "wait", "pdf", "api", 
-        "google_sheets", "database"
+        "core",
+        "vision",
+        "tabs",
+        "console",
+        "keyboard",
+        "network",
+        "files",
+        "wait",
+        "api",
+        "google_sheets",
+        "database",
     ]
     for capability in capabilities:
         print(f"  - {capability}")
@@ -342,9 +348,17 @@ def parse_capabilities(capabilities_str: Optional[str]) -> Optional[List[str]]:
     capabilities = [cap.strip() for cap in capabilities_str.split(",")]
 
     valid_capabilities = {
-        "core", "vision", "tabs", "console", "keyboard", 
-        "network", "files", "wait", "pdf", "api", 
-        "google_sheets", "database"
+        "core",
+        "vision",
+        "tabs",
+        "console",
+        "keyboard",
+        "network",
+        "files",
+        "wait",
+        "api",
+        "google_sheets",
+        "database",
     }
     invalid_capabilities = set(capabilities) - valid_capabilities
 

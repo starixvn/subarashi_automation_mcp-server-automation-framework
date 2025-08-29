@@ -37,8 +37,8 @@ class BaseService(ABC):
     async def ensure_tab(self):
         return await self.context.ensure_tab()
 
-    def get_settings(self):
-        return self.context.settings
+    def get_config(self):
+        return self.context.config
 
     async def handle_error(self, error: Exception, operation: str) -> Dict[str, Any]:
         error_msg = f"Error in {operation}: {str(error)}"

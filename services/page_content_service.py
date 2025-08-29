@@ -20,67 +20,87 @@ class PageContentService(BaseService):
             return html_content
 
     async def get_page_html(
-        self, format_html: bool = True, max_length: int = 150000
+        self, format_html: bool = True, max_length: int = 550000
     ) -> Dict[str, Any]:
         try:
             tab = self.get_current_tab()
-            html_content = await tab.page.evaluate("""
+            html_content = await tab.page.evaluate(
+                """
                 () => {
-                    const html = document.documentElement.outerHTML;
+                    const body = document.body;
+                    if (!body) {
+                        return '<body></body>';
+                    }
                     
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = html;
+                    const clonedBody = body.cloneNode(true);
                     
                     const unnecessarySelectors = [
-                        'head',
-                        'script', 
+                        'script',
                         'style',
+                        'noscript',
                         'link[rel="stylesheet"]',
                         'link[rel="icon"]',
+                        'link[rel="prefetch"]',
+                        'link[rel="preload"]',
                         'meta',
-                        'title',
-                        'noscript'
+                        'base',
+                        'template',
+                        'script[type="application/ld+json"]',
+                        'script[type="text/template"]'
                     ];
                     
                     unnecessarySelectors.forEach(selector => {
-                        const elements = tempDiv.querySelectorAll(selector);
+                        const elements = clonedBody.querySelectorAll(selector);
                         elements.forEach(el => el.remove());
                     });
                     
-                    const iframes = tempDiv.querySelectorAll('iframe');
+                    const iframes = clonedBody.querySelectorAll('iframe');
                     Array.from(iframes).forEach((iframe, index) => {
-                        try {
-                            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                            if (iframeDoc) {
-                                const iframeBody = iframeDoc.body;
-                                if (iframeBody) {
-                                    const comment = document.createComment(
-                                        ` IFRAME #${index} CONTENT: ${iframeBody.innerHTML.substring(0, 500)} `
-                                    );
-                                    iframe.parentNode.insertBefore(comment, iframe.nextSibling);
+                        const marker = document.createElement('div');
+                        marker.className = 'iframe-placeholder';
+                        marker.setAttribute('data-iframe-index', index.toString());
+                        marker.setAttribute('data-iframe-src', iframe.src || 'about:blank');
+                        marker.setAttribute('data-iframe-id', iframe.id || '');
+                        marker.setAttribute('data-iframe-name', iframe.name || '');
+                        marker.textContent = `[IFRAME #${index}: ${iframe.src || 'about:blank'}]`;
+                        
+                        ['id', 'class', 'name', 'title', 'data-*'].forEach(attr => {
+                            if (attr === 'data-*') {
+                                for (let i = 0; i < iframe.attributes.length; i++) {
+                                    const attrName = iframe.attributes[i].name;
+                                    if (attrName.startsWith('data-')) {
+                                        marker.setAttribute(attrName, iframe.attributes[i].value);
+                                    }
                                 }
-                            } else {
-                                const comment = document.createComment(
-                                    ` IFRAME #${index} (cross-origin): src="${iframe.src}" `
-                                );
-                                iframe.parentNode.insertBefore(comment, iframe.nextSibling);
+                            } else if (iframe.hasAttribute(attr)) {
+                                marker.setAttribute(attr, iframe.getAttribute(attr));
                             }
-                        } catch (e) {
-                            const comment = document.createComment(
-                                ` IFRAME #${index} (access denied): src="${iframe.src}" `
-                            );
-                            iframe.parentNode.insertBefore(comment, iframe.nextSibling);
-                        }
+                        });
+                        
+                        iframe.parentNode.replaceChild(marker, iframe);
                     });
                     
-                    const body = tempDiv.querySelector('body');
-                    if (body) {
-                        return body.outerHTML;
+                    function cleanupTextNodes(node) {
+                        for (let i = node.childNodes.length - 1; i >= 0; i--) {
+                            const child = node.childNodes[i];
+                            if (child.nodeType === Node.TEXT_NODE) {
+                                if (child.textContent.trim() === '' && 
+                                    (child.previousSibling?.nodeType === Node.ELEMENT_NODE || 
+                                     child.nextSibling?.nodeType === Node.ELEMENT_NODE)) {
+                                    node.removeChild(child);
+                                }
+                            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                                cleanupTextNodes(child);
+                            }
+                        }
                     }
                     
-                    return tempDiv.innerHTML;
+                    cleanupTextNodes(clonedBody);
+                    
+                    return clonedBody.outerHTML;
                 }
-            """)
+            """
+            )
 
             if format_html and html_content:
                 html_content = self._format_html(html_content)

@@ -1,4 +1,3 @@
-from .settings import Settings
 from .settings import (
     Config,
     FullConfig,
@@ -16,8 +15,6 @@ from .settings import (
     load_config,
     output_file,
     merge_config,
-    config_to_settings,
-    settings_to_config,
     sanitize_for_file_path,
 )
 
@@ -32,7 +29,6 @@ from .cli import (
 )
 
 __all__ = [
-    "Settings",
     "Config",
     "FullConfig",
     "CLIOptions",
@@ -49,10 +45,7 @@ __all__ = [
     "load_config",
     "output_file",
     "merge_config",
-    "config_to_settings",
-    "settings_to_config",
     "sanitize_for_file_path",
-    # CLI functions
     "create_enhanced_parser",
     "parse_enhanced_args",
     "list_capabilities",

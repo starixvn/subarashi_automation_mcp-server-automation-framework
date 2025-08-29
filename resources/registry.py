@@ -1,5 +1,3 @@
-"""FastMCP compliant resource management using library patterns."""
-
 import logging
 import datetime
 from typing import List

@@ -14,7 +14,7 @@ def load_existing_storage_state(file_path):
         try:
             with open(file_path, "r") as f:
                 return json.load(f)
-        except:
+        except Exception:
             return None
     return None
 
@@ -110,7 +110,7 @@ def save_storage_state(url, storage_file):
         with open(storage_file, "w") as f:
             json.dump(final_state, f, indent=2)
 
-        print(f"✅ Storage state saved!")
+        print("✅ Storage state saved!")
         print(
             f"📊 Final state: {len(final_state.get('cookies', []))} cookies, {len(final_state.get('origins', []))} origins"
         )

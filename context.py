@@ -5,7 +5,7 @@ import threading
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 import weakref
 
-from config.settings import Settings
+from config.settings import FullConfig
 from core.modal_state import (
     ModalState,
     ModalStateWithTab,
@@ -45,7 +45,7 @@ class SessionBrowserContext:
         self._tabs: List[Tab] = []
         self._current_tab: Optional[Tab] = None
         self._modal_states: List[ModalStateWithTab] = []
-        self._download_tracker = DownloadTracker(server_context.settings.output_dir)
+        self._download_tracker = DownloadTracker(server_context.config.output_dir)
 
     async def ensure_browser_context(self) -> BrowserContextResult:
         if self._browser_context_promise is None:
@@ -255,14 +255,14 @@ class SessionBrowserContext:
 class ServerContext:
     def __init__(
         self,
-        settings: Settings,
+        config: FullConfig,
         capabilities: Optional[List[str]] = None,
         **factory_kwargs,
     ):
-        self.settings: Settings = settings
-        self._browser_context_manager = get_browser_context_manager(settings)
+        self.config: FullConfig = config
+        self._browser_context_manager = get_browser_context_manager(config)
         self._browser_context_factory = create_browser_context_factory(
-            settings, **factory_kwargs
+            config, **factory_kwargs
         )
 
         self._session_contexts: Dict[str, SessionBrowserContext] = {}
@@ -426,10 +426,10 @@ class ServerContext:
         return session_context.get_downloads_markdown()
 
     def client_supports_images(self) -> bool:
-        if hasattr(self.settings, "image_responses"):
-            if self.settings.image_responses == "allow":
+        if hasattr(self.config, "image_responses"):
+            if self.config.image_responses == "allow":
                 return True
-            if self.settings.image_responses == "omit":
+            if self.config.image_responses == "omit":
                 return False
 
         if (

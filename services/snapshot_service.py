@@ -8,11 +8,8 @@ class SnapshotService(BaseService):
         try:
             tab = self.get_current_tab()
             page = tab.page
-
             snapshot_obj = PageSnapshot(page)
-
             aria_snapshot = await snapshot_obj.snapshot_for_ai(timeout=timeout)
-
             refs_found = self._extract_refs_from_aria_snapshot(aria_snapshot)
 
             return self.success_response(
@@ -45,9 +42,7 @@ class SnapshotService(BaseService):
             page = tab.page
             snapshot_obj = PageSnapshot(page)
             aria_snapshot = await snapshot_obj.snapshot_for_ai()
-
             tab.snapshot = snapshot_obj
-
             refs_found = self._extract_refs_from_aria_snapshot(aria_snapshot)
 
             return self.success_response(
@@ -65,7 +60,6 @@ class SnapshotService(BaseService):
     async def get_current_snapshot(self) -> Dict[str, Any]:
         try:
             return await self.capture_snapshot_for_ai()
-
         except Exception as e:
             return await self.handle_error(e, "get_current_snapshot")
 
@@ -80,8 +74,8 @@ class SnapshotService(BaseService):
 
             snapshot = tab.get_current_snapshot()
             element_refs = snapshot.get_all_element_references()
-
             elements = []
+
             for ref, elem in element_refs.items():
                 elements.append(
                     {
@@ -154,7 +148,7 @@ class SnapshotService(BaseService):
                     data={"saved": False}, message="No screenshot in snapshot"
                 )
 
-            output_path = self.get_settings().output_dir / filepath
+            output_path = self.get_config().output_dir / filepath
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             success = await snapshot.save_screenshot(output_path)
@@ -196,7 +190,7 @@ class SnapshotService(BaseService):
         try:
             tab = self.get_current_tab()
             tab.clear_snapshot()
-
+            
             return self.success_response(message="Snapshot cleared")
 
         except Exception as e:

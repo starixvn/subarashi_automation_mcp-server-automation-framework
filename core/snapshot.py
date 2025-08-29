@@ -155,9 +155,26 @@ class PageSnapshot:
                             
                             function isElementVisible(el) {
                                 var style = getComputedStyle(el);
-                                return style.display !== 'none' && 
-                                       style.visibility !== 'hidden' && 
-                                       style.opacity !== '0';
+                                if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+                                    return false;
+                                }
+                                var rect = el.getBoundingClientRect();
+                                return rect.width > 0 && rect.height > 0;
+                            }
+                            
+                            function isElementHiddenForAria(el) {
+                                if (el.getAttribute('aria-hidden') === 'true') {
+                                    return true;
+                                }
+                                var style = getComputedStyle(el);
+                                if (style.display === 'none') {
+                                    return true;
+                                }
+                                return false;
+                            }
+                            
+                            function isElementVisibleForMode(el) {
+                                return !isElementHiddenForAria(el) || isElementVisible(el);
                             }
                             
                             function getSemanticRole(el) {
@@ -281,12 +298,17 @@ class PageSnapshot:
                             }
                             
                             function shouldReceiveRef(el) {
-                                var role = getSemanticRole(el);
-                                var style = getComputedStyle(el);
-                                
-                                if (style.pointerEvents === 'none' || style.display === 'none') {
+                                if (!isElementVisible(el)) {
                                     return false;
                                 }
+                                
+                                var style = getComputedStyle(el);
+                                if (style.pointerEvents === 'none') {
+                                    return false;
+                                }
+                                
+                                var role = getSemanticRole(el);
+                                var tag = el.tagName.toLowerCase();
                                 
                                 if (['button', 'link', 'textbox', 'combobox', 'checkbox', 'radio'].includes(role)) {
                                     return true;
@@ -307,20 +329,14 @@ class PageSnapshot:
                                 if (role === 'generic') {
                                     var directText = '';
                                     for (var i = 0; i < el.childNodes.length; i++) {
-                                        if (el.childNodes[i].nodeType === 3) { // Text node
+                                        if (el.childNodes[i].nodeType === 3) {
                                             directText += el.childNodes[i].textContent || '';
                                         }
                                     }
                                     directText = directText.trim();
                                     
                                     if (directText && directText.length > 8) {
-                                        var skipPatterns = ['Copyright', 'All rights reserved', 'Grand Total', 'Total in'];
-                                        var hasSkipPattern = skipPatterns.some(function(pattern) {
-                                            return directText.includes(pattern);
-                                        });
-                                        if (!hasSkipPattern) {
-                                            return true;
-                                        }
+                                        return true;
                                     }
                                     
                                     var interactiveChildren = el.querySelectorAll('button, a, input, select, textarea, [onclick], [role="button"]');
@@ -335,23 +351,6 @@ class PageSnapshot:
                                     return false;
                                 }
                                 
-                                if (['cell', 'columnheader'].includes(role)) {
-                                    var cellText = el.textContent && el.textContent.trim();
-                                    if (role === 'columnheader') return true;
-                                    
-                                    if (!cellText || cellText === '') return false;
-                                    
-                                    if (/^\d+$/.test(cellText)) return false;
-                                    
-                                    if (/^0\.0+$/.test(cellText)) return false;
-                                    
-                                    return cellText.length > 5;
-                                }
-                                
-                                if (['row', 'rowgroup'].includes(role)) {
-                                    return false;
-                                }
-                                
                                 if (['region', 'section', 'complementary', 'search', 'tabpanel', 'dialog', 'alertdialog'].includes(role)) {
                                     return true;
                                 }
@@ -360,11 +359,45 @@ class PageSnapshot:
                             }
                             
                             function createAriaNode(el) {
-                                if (!isElementVisible(el)) return null;
+                                if (!isElementVisibleForMode(el)) return null;
                                 
                                 var role = getSemanticRole(el);
                                 var name = getAccessibleName(el);
                                 var ref = null;
+                                
+                                if (['cell', 'columnheader', 'row'].includes(role)) {
+                                    var hasContent = false;
+                                    
+                                    var directText = el.textContent ? el.textContent.trim() : '';
+                                    if (directText && directText.length > 0) {
+                                        hasContent = true;
+                                    }
+                                    
+                                    if (!hasContent) {
+                                        var meaningfulChildren = Array.from(el.children).filter(function(child) {
+                                            var childTag = child.tagName.toLowerCase();
+                                            var childText = child.textContent ? child.textContent.trim() : '';
+                                            return childText.length > 0 || 
+                                                   ['img', 'input', 'button', 'a', 'select', 'textarea'].includes(childTag);
+                                        });
+                                        hasContent = meaningfulChildren.length > 0;
+                                    }
+                                    
+                                    if (!hasContent && role === 'cell') {
+                                        return null;
+                                    }
+                                    
+                                    if (!hasContent && role === 'row') {
+                                        var cells = el.querySelectorAll('td, th');
+                                        var hasNonEmptyCell = Array.from(cells).some(function(cell) {
+                                            var cellText = cell.textContent ? cell.textContent.trim() : '';
+                                            return cellText.length > 0 || cell.children.length > 0;
+                                        });
+                                        if (!hasNonEmptyCell) {
+                                            return null;
+                                        }
+                                    }
+                                }
                                 
                                 if (shouldReceiveRef(el)) {
                                     ref = refPrefix + 'e' + refCounter++;
