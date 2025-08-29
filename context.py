@@ -4,6 +4,7 @@ import logging
 import threading
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 import weakref
+from pathlib import Path
 
 from config.settings import FullConfig
 from core.modal_state import (
@@ -45,7 +46,7 @@ class SessionBrowserContext:
         self._tabs: List[Tab] = []
         self._current_tab: Optional[Tab] = None
         self._modal_states: List[ModalStateWithTab] = []
-        self._download_tracker = DownloadTracker(server_context.config.output_dir)
+        self._download_tracker = DownloadTracker(Path(server_context.config.output_dir))
 
     async def ensure_browser_context(self) -> BrowserContextResult:
         if self._browser_context_promise is None:
