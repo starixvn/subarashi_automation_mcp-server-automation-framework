@@ -1,6 +1,49 @@
 from mcp.server.fastmcp import FastMCP, Context
 from context import ServerContext
 from services import GoogleSheetsService
+import json
+
+
+def parse_values_string(values_str: str) -> list:
+    if not values_str:
+        return [[""]]
+
+    try:
+        parsed = json.loads(values_str)
+        if isinstance(parsed, list) and all(isinstance(row, list) for row in parsed):
+            return parsed
+        elif isinstance(parsed, list):
+            return [parsed]
+        else:
+            return [[str(parsed)]]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    if "\n" in values_str:
+        rows = []
+        for line in values_str.strip().split("\n"):
+            if line.strip():
+                if "\t" in line:
+                    row = [
+                        cell.strip().strip('"').strip("'") for cell in line.split("\t")
+                    ]
+                else:
+                    row = [
+                        cell.strip().strip('"').strip("'") for cell in line.split(",")
+                    ]
+                rows.append(row)
+        return rows if rows else [[values_str]]
+
+    elif "\t" in values_str:
+        row = [cell.strip().strip('"').strip("'") for cell in values_str.split("\t")]
+        return [row]
+
+    elif "," in values_str:
+        row = [cell.strip().strip('"').strip("'") for cell in values_str.split(",")]
+        return [row]
+
+    else:
+        return [[values_str]]
 
 
 def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) -> None:
@@ -85,7 +128,9 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
         spreadsheet_id: str, range_name: str, values: str, context: Context
     ) -> str:
         service = GoogleSheetsService(server_context)
-        result = await service.write_range(spreadsheet_id, range_name, values)
+        parsed_values = parse_values_string(values)
+        result = await service.write_range(spreadsheet_id, range_name, parsed_values)
+
         return (
             f"Written to range {range_name}"
             if result.success
@@ -97,7 +142,8 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
         spreadsheet_id: str, range_name: str, values: str, context: Context
     ) -> str:
         service = GoogleSheetsService(server_context)
-        result = await service.append_data(spreadsheet_id, range_name, values)
+        parsed_values = parse_values_string(values)
+        result = await service.append_data(spreadsheet_id, range_name, parsed_values)
         return (
             f"Appended data to {range_name}"
             if result.success

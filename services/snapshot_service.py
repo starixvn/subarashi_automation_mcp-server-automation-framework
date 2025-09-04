@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any, List
 from .base_service import BaseService
 from core.snapshot import PageSnapshot
@@ -190,7 +191,7 @@ class SnapshotService(BaseService):
         try:
             tab = self.get_current_tab()
             tab.clear_snapshot()
-            
+
             return self.success_response(message="Snapshot cleared")
 
         except Exception as e:
@@ -378,8 +379,6 @@ class SnapshotService(BaseService):
     def _extract_refs_from_aria_snapshot(
         self, aria_snapshot: str
     ) -> Dict[str, List[str]]:
-        import re
-
         main_refs = []
         iframe_refs = []
         ref_pattern = r"\[ref=([^\]]+)\]"

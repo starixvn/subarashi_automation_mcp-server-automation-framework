@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, TYPE_CHECKING
 from pathlib import Path
 import tempfile
+import uuid
 from playwright.async_api import async_playwright, Browser, BrowserContext, Playwright
 
 if TYPE_CHECKING:
@@ -306,8 +307,6 @@ class PersistentContextFactory(BrowserContextFactory):
     async def _create_user_data_dir(self) -> str:
         temp_dir = Path(tempfile.gettempdir())
         mcp_dir = temp_dir / "mcp-automation-server"
-
-        import uuid
 
         unique_suffix = uuid.uuid4().hex[:8]
         profile_dir = mcp_dir / f"{self.config.browser_type}-profile-{unique_suffix}"

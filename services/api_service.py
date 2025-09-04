@@ -43,14 +43,31 @@ class ApiService(BaseService):
                             "",
                         )
                         if "application/json" in content_type.lower():
+                            if body.strip():
+                                try:
+                                    kwargs["json"] = json.loads(body)
+                                except json.JSONDecodeError:
+                                    kwargs["data"] = body
+                            else:
+                                kwargs["json"] = {}
+                        else:
+                            kwargs["data"] = body
+                    else:
+                        if body.strip().startswith(("{", "[")):
                             try:
                                 kwargs["json"] = json.loads(body)
+                                if not headers:
+                                    kwargs["headers"] = {
+                                        "Content-Type": "application/json"
+                                    }
+                                else:
+                                    kwargs["headers"]["Content-Type"] = (
+                                        "application/json"
+                                    )
                             except json.JSONDecodeError:
                                 kwargs["data"] = body
                         else:
                             kwargs["data"] = body
-                    else:
-                        kwargs["data"] = body
 
                 async with session.request(**kwargs) as response:
                     response_text = await response.text()

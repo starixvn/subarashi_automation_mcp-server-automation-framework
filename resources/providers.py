@@ -96,11 +96,6 @@ def create_filesystem_resources(
 
 
 class FileSystemResourceProvider:
-    """DEPRECATED: Use FastMCP FileResource directly instead.
-
-    This class is kept for backward compatibility.
-    """
-
     def __init__(self, *args, **kwargs):
         logger.warning(
             "FileSystemResourceProvider is deprecated. "
