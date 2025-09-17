@@ -6,7 +6,7 @@ from typing import Optional, Dict
 
 
 def register_vision_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Take a screenshot")
     async def browser_take_screenshot(
         context: Context,
         full_page: bool = True,
@@ -45,7 +45,7 @@ def register_vision_tools(app: FastMCP, server_context: ServerContext) -> None:
         else:
             return [TextContent(type="text", text=f"Screenshot failed: {result.error}")]
 
-    @app.tool()
+    @app.tool(description="Click at a specific screen coordinate")
     async def browser_screen_click(x: int, y: int, context: Context) -> str:
         service = VisionService(server_context)
         result = await service.screen_click(x, y)
@@ -55,7 +55,7 @@ def register_vision_tools(app: FastMCP, server_context: ServerContext) -> None:
             else f"Screen click failed: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Drag from one screen coordinate to another")
     async def browser_screen_drag(
         start_x: int, start_y: int, end_x: int, end_y: int, context: Context
     ) -> str:
@@ -67,7 +67,7 @@ def register_vision_tools(app: FastMCP, server_context: ServerContext) -> None:
             else f"Screen drag failed: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Type text at a specific screen coordinate")
     async def browser_screen_type(x: int, y: int, text: str, context: Context) -> str:
         service = VisionService(server_context)
         result = await service.screen_type(x, y, text)
@@ -77,7 +77,7 @@ def register_vision_tools(app: FastMCP, server_context: ServerContext) -> None:
             else f"Screen type failed: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Move the mouse to a specific screen coordinate")
     async def browser_screen_move_mouse(x: int, y: int, context: Context) -> str:
         service = VisionService(server_context)
         result = await service.move_mouse(x, y)

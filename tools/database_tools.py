@@ -4,7 +4,7 @@ from services import DatabaseService
 
 
 def register_database_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Connect to a database")
     async def db_connect(connection_string: str, context: Context) -> str:
         service = DatabaseService(server_context)
         result = await service.connect(connection_string)
@@ -14,7 +14,7 @@ def register_database_tools(app: FastMCP, server_context: ServerContext) -> None
             else f"Connection failed: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Execute a SQL query")
     async def db_query(sql: str, context: Context) -> str:
         service = DatabaseService(server_context)
         result = await service.execute_query(sql)
@@ -29,7 +29,7 @@ def register_database_tools(app: FastMCP, server_context: ServerContext) -> None
         else:
             return f"Query failed: {result.error}"
 
-    @app.tool()
+    @app.tool(description="Execute a SQL command")
     async def db_execute(sql: str, context: Context) -> str:
         service = DatabaseService(server_context)
         result = await service.execute_command(sql)
@@ -39,7 +39,7 @@ def register_database_tools(app: FastMCP, server_context: ServerContext) -> None
         else:
             return f"Execute failed: {result.error}"
 
-    @app.tool()
+    @app.tool(description="Close the database connection")
     async def db_close(context: Context) -> str:
         service = DatabaseService(server_context)
         result = await service.close_connection()

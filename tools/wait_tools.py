@@ -6,7 +6,7 @@ from services import CoreService
 
 
 def register_wait_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Wait for a condition")
     async def browser_wait_for(
         wait_type: str,
         context: Context,

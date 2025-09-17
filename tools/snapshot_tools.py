@@ -5,7 +5,7 @@ from mcp.types import TextContent
 
 
 def register_snapshot_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Capture a snapshot of the page for AI processing")
     async def browser_snapshot(context: Context) -> list[TextContent]:
         service = SnapshotService(server_context)
         result = await service.capture_snapshot_for_ai()

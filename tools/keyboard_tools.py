@@ -4,7 +4,7 @@ from services import KeyboardService
 
 
 def register_keyboard_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Press a specific key")
     async def browser_press_key(key: str, context: Context) -> str:
         service = KeyboardService(server_context)
         result = await service.press_key(key)

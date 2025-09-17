@@ -5,7 +5,7 @@ from services import CoreService
 
 
 def register_content_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Get the page text")
     async def browser_get_page_text(context: Context) -> str:
         try:
             tab = server_context.current_tab_or_die()
@@ -96,7 +96,7 @@ def register_content_tools(app: FastMCP, server_context: ServerContext) -> None:
         except Exception as e:
             return f"Failed to get page text: {str(e)}"
 
-    @app.tool()
+    @app.tool(description="Get the page HTML")
     async def browser_get_page_html(context: Context) -> str:
         service = PageContentService(server_context)
         result = await service.get_page_html()

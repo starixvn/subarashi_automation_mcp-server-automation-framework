@@ -4,7 +4,7 @@ from services import ConsoleService
 
 
 def register_console_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Clear the console")
     async def browser_console_clear(context: Context) -> str:
         service = ConsoleService(server_context)
         result = await service.clear_console()
@@ -14,7 +14,7 @@ def register_console_tools(app: FastMCP, server_context: ServerContext) -> None:
             else f"Failed to clear console: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Get console messages")
     async def browser_console_messages(context: Context) -> str:
         service = ConsoleService(server_context)
         result = await service.get_console_messages()

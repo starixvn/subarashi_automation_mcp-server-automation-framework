@@ -115,7 +115,7 @@ def validate_and_format_json_body(body_str: str) -> tuple[str, bool]:
 
 
 def register_api_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Make an API request")
     async def api_request(
         method: str,
         url: str,

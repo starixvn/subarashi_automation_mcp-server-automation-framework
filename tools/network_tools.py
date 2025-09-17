@@ -4,7 +4,7 @@ from services import NetworkService
 
 
 def register_network_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Get all captured network requests")
     async def browser_network_requests(context: Context) -> str:
         service = NetworkService(server_context)
         result = await service.get_network_requests()

@@ -5,7 +5,7 @@ from services import CoreService
 
 
 def register_evaluate_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Evaluate JavaScript code in the browser")
     async def browser_evaluate(javascript_code: str, context: Context) -> str:
         service = PageContentService(server_context)
         result = await service.evaluate_javascript(javascript_code)

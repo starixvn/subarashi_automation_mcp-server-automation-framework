@@ -6,7 +6,7 @@ from typing import Optional, List
 
 
 def register_interaction_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Click an element")
     async def browser_click(
         context: Context,
         element: str,
@@ -53,7 +53,7 @@ def register_interaction_tools(app: FastMCP, server_context: ServerContext) -> N
         else:
             return [TextContent(type="text", text=f"**Click Failed:** {result.error}")]
 
-    @app.tool()
+    @app.tool(description="Type text into an element")
     async def browser_type(
         context: Context,
         element: str,
@@ -96,7 +96,7 @@ def register_interaction_tools(app: FastMCP, server_context: ServerContext) -> N
         else:
             return [TextContent(type="text", text=f"**Type Failed:** {result.error}")]
 
-    @app.tool()
+    @app.tool(description="Hover over an element")
     async def browser_hover(
         context: Context, element: str, ref: str, duration: int = 1000
     ) -> list[Content]:
@@ -117,7 +117,7 @@ def register_interaction_tools(app: FastMCP, server_context: ServerContext) -> N
         else:
             return [TextContent(type="text", text=f"**Hover Failed:** {result.error}")]
 
-    @app.tool()
+    @app.tool(description="Select an option from a dropdown")
     async def browser_select_option(
         context: Context,
         element: str,
@@ -163,7 +163,7 @@ def register_interaction_tools(app: FastMCP, server_context: ServerContext) -> N
         else:
             return [TextContent(type="text", text=f"**Select Failed:** {result.error}")]
 
-    @app.tool()
+    @app.tool(description="Get the text content of an element")
     async def browser_get_text(
         context: Context, element: str, ref: str
     ) -> list[Content]:
@@ -185,7 +185,7 @@ def register_interaction_tools(app: FastMCP, server_context: ServerContext) -> N
                 TextContent(type="text", text=f"**Get Text Failed:** {result.error}")
             ]
 
-    @app.tool()
+    @app.tool(description="Drag an element to another element")
     async def browser_drag(
         context: Context,
         start_element: str,

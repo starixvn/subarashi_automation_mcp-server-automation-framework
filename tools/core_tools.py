@@ -4,7 +4,7 @@ from services import CoreService
 
 
 def register_core_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Navigate to a URL")
     async def browser_navigate(url: str, context: Context) -> str:
         service = CoreService(server_context)
         nav_result = await service.navigate_to_url(url)
@@ -21,13 +21,13 @@ def register_core_tools(app: FastMCP, server_context: ServerContext) -> None:
 
         return f"Successfully navigated to: {current_url}\n Page title: {page_title}\n Status: Navigation completed"
 
-    @app.tool()
+    @app.tool(description="Close the browser")
     async def browser_close(context: Context) -> str:
         service = CoreService(server_context)
         result = await service.close_browser()
         return result["message"] if result["success"] else f"Error: {result['error']}"
 
-    @app.tool()
+    @app.tool(description="Resize the browser window")
     async def browser_resize(width: int, height: int, context: Context) -> str:
         service = CoreService(server_context)
         result = await service.resize_browser(width, height)
@@ -37,7 +37,7 @@ def register_core_tools(app: FastMCP, server_context: ServerContext) -> None:
             else f"Resize failed: {result['error']}"
         )
 
-    @app.tool()
+    @app.tool(description="Navigate back in the browser history")
     async def browser_navigate_back(context: Context) -> str:
         service = CoreService(server_context)
         back_result = await service.go_back()
@@ -54,7 +54,7 @@ def register_core_tools(app: FastMCP, server_context: ServerContext) -> None:
 
         return f"Navigated back to: {current_url}\n Page title: {page_title}\n Status: Back navigation completed"
 
-    @app.tool()
+    @app.tool(description="Navigate forward in the browser history")
     async def browser_navigate_forward(context: Context) -> str:
         service = CoreService(server_context)
         forward_result = await service.go_forward()
@@ -71,7 +71,7 @@ def register_core_tools(app: FastMCP, server_context: ServerContext) -> None:
 
         return f"Navigated forward to: {current_url}\n Page title: {page_title}\n Status: Forward navigation completed"
 
-    @app.tool()
+    @app.tool(description="Reload the current page")
     async def browser_reload_page(context: Context) -> str:
         service = CoreService(server_context)
         reload_result = await service.reload_page()
@@ -87,4 +87,3 @@ def register_core_tools(app: FastMCP, server_context: ServerContext) -> None:
         )
 
         return f"Page reloaded: {current_url}\n Page title: {page_title}\n Status: Reload completed"
-

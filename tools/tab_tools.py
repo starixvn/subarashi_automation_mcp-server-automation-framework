@@ -5,7 +5,7 @@ from services import CoreService
 
 
 def register_tab_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Open a new tab")
     async def browser_tab_new(url: str, context: Context) -> str:
         service = TabsService(server_context)
         result = await service.create_new_tab(url)
@@ -23,7 +23,7 @@ def register_tab_tools(app: FastMCP, server_context: ServerContext) -> None:
 
         return f"Successfully opened new tab\n URL: {current_url}\n Title: {page_title}\n Status: New tab created"
 
-    @app.tool()
+    @app.tool(description="Close a tab")
     async def browser_tab_close(tab_id: int, context: Context) -> str:
         service = TabsService(server_context)
         result = await service.close_tab(tab_id)
@@ -33,7 +33,7 @@ def register_tab_tools(app: FastMCP, server_context: ServerContext) -> None:
             else f"Failed to close tab: {result['error']}"
         )
 
-    @app.tool()
+    @app.tool(description="Switch to a specific tab")
     async def browser_tab_select(tab_id: int, context: Context) -> str:
         service = TabsService(server_context)
         result = await service.select_tab(tab_id)
@@ -50,7 +50,7 @@ def register_tab_tools(app: FastMCP, server_context: ServerContext) -> None:
 
         return f"Successfully switched to tab {tab_id}\n URL: {current_url}\n Title: {page_title}\n Status: Tab switched"
 
-    @app.tool()
+    @app.tool(description="List all open tabs")
     async def browser_tab_list(context: Context) -> str:
         service = TabsService(server_context)
         result = await service.list_tabs()

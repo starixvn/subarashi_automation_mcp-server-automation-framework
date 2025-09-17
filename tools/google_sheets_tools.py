@@ -47,7 +47,7 @@ def parse_values_string(values_str: str) -> list:
 
 
 def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) -> None:
-    @app.tool()
+    @app.tool(description="Create a new spreadsheet")
     async def sheets_create_spreadsheet(title: str, context: Context) -> str:
         service = GoogleSheetsService(server_context)
         result = await service.create_spreadsheet(title)
@@ -57,7 +57,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
             else f"Failed to create: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Open an existing spreadsheet")
     async def sheets_open_spreadsheet(spreadsheet_id: str, context: Context) -> str:
         service = GoogleSheetsService(server_context)
         result = await service.open_spreadsheet(spreadsheet_id)
@@ -67,7 +67,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
             else f"Failed to open: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Share a spreadsheet with a user")
     async def sheets_share_spreadsheet(
         spreadsheet_id: str, email: str, role: str, context: Context
     ) -> str:
@@ -79,7 +79,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
             else f"Failed to share: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="List all spreadsheets")
     async def sheets_list_spreadsheets(context: Context) -> str:
         service = GoogleSheetsService(server_context)
         result = await service.list_spreadsheets()
@@ -94,7 +94,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
         else:
             return f"Failed to list spreadsheets: {result.error}"
 
-    @app.tool()
+    @app.tool(description="Create a new worksheet")
     async def sheets_create_worksheet(
         spreadsheet_id: str, title: str, context: Context
     ) -> str:
@@ -106,7 +106,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
             else f"Failed to create worksheet: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Read data from a specific range")
     async def sheets_read_range(
         spreadsheet_id: str, range_name: str, context: Context
     ) -> str:
@@ -123,7 +123,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
         else:
             return f"Failed to read range: {result.error}"
 
-    @app.tool()
+    @app.tool(description="Write data to a specific range")
     async def sheets_write_range(
         spreadsheet_id: str, range_name: str, values: str, context: Context
     ) -> str:
@@ -137,7 +137,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
             else f"Failed to write: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Append data to a specific range")
     async def sheets_append_data(
         spreadsheet_id: str, range_name: str, values: str, context: Context
     ) -> str:
@@ -150,7 +150,7 @@ def register_google_sheets_tools(app: FastMCP, server_context: ServerContext) ->
             else f"Failed to append: {result.error}"
         )
 
-    @app.tool()
+    @app.tool(description="Clear data from a specific range")
     async def sheets_clear_range(
         spreadsheet_id: str, range_name: str, context: Context
     ) -> str:
